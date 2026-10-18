@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+**/.idea/
+**/*.user
+artifacts/
+out/
+Cpp/build/
+.vs/

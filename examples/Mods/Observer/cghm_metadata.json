@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "cgh.observer",
+  "name": "CGH 隔离模组示例",
+  "version": "1.0.0",
+  "description": "独立 MRT 子进程，通过运行时与 GMod 模组交换消息。",
+  "author": "ConsGHost",
+  "loadAsSubprocess": true,
+  "dependencies": [{"id": "cgh.example", "minVersion": "1.0.0", "maxVersionExclusive": "2.0.0"}],
+  "managedAssemblies": ["Observer.dll"]
+}
