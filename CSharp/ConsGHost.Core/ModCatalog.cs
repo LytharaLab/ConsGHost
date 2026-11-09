@@ -35,9 +35,10 @@ public static partial class ModCatalog
                 }
                 var managed = Assemblies(directory, "Managed", metadata.ManagedAssemblies);
                 var native = Assemblies(directory, "Native", metadata.NativeLibraries);
+                var addons = ScanAddons(directory, metadata.IgnoredAddons);
                 foreach (var file in managed) _ = AssemblyName.GetAssemblyName(file);
                 foreach (var file in native) ValidateX64(file, requireNativeDll: true);
-                mods.Add(new(metadata, Path.GetFullPath(directory), managed, native));
+                mods.Add(new(metadata, Path.GetFullPath(directory), managed, native) { Addons = addons });
             }
             catch (Exception ex) { issues.Add(new(directory, ex.Message)); }
         }
@@ -105,6 +106,26 @@ public static partial class ModCatalog
             if (current.Equals(root, StringComparison.OrdinalIgnoreCase)) break;
         }
         return full;
+    }
+
+    private static List<ModAddon> ScanAddons(string root, List<string> ignoredNames)
+    {
+        if (ignoredNames == null || ignoredNames.Any(name => string.IsNullOrWhiteSpace(name) ||
+            name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.TrimEnd(' ', '.') != name))
+            throw new InvalidDataException("ignoredAddons must contain only addon folder or file names.");
+        var ignored = ignoredNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var directory = SafePath(root, "Addons");
+        List<ModAddon> addons = [];
+        if (!Directory.Exists(directory)) return addons;
+        foreach (var entry in new DirectoryInfo(directory).EnumerateFileSystemInfos().OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            bool isFolder = (entry.Attributes & FileAttributes.Directory) != 0;
+            if (!isFolder && !entry.Extension.Equals(".gma", StringComparison.OrdinalIgnoreCase)) continue;
+            bool isIgnored = ignored.Contains(entry.Name);
+            var path = isIgnored ? entry.FullName : SafePath(directory, entry.Name);
+            addons.Add(new(entry.Name, path, !isFolder, isIgnored));
+        }
+        return addons;
     }
 
     private static List<string> Assemblies(string root, string folder, List<string>? declared)

@@ -8,6 +8,8 @@ internal sealed class RuntimePeer(string endpoint, HashSet<string> mods)
     public string Endpoint { get; } = endpoint;
     public HashSet<string> Mods { get; } = mods;
     public Wire? Wire { get; set; }
+    public volatile bool Disconnected;
+    public bool IsConnected => Wire != null && !Disconnected;
     public int ProcessId { get; set; }
     public DateTime LastHeartbeat { get; set; } = DateTime.UtcNow;
     public TaskCompletionSource Loaded { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);

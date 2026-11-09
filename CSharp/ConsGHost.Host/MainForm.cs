@@ -1,159 +1,73 @@
 using System.Diagnostics;
 using ConsGHost.Core;
+using static ConsGHost.Host.HostTheme;
 
 namespace ConsGHost.Host;
 
-public sealed class MainForm : Form
+public sealed partial class MainForm : Form
 {
     private readonly string _root = AppContext.BaseDirectory;
-    private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
-    private readonly DataGridView _mods = Grid();
-    private readonly DataGridView _extras = Grid();
-    private readonly RichTextBox _log = new() { Dock = DockStyle.Fill, ReadOnly = true, BackColor = Color.FromArgb(18, 23, 31), ForeColor = Color.Gainsboro, Font = new Font("Consolas", 10), BorderStyle = BorderStyle.None };
-    private readonly Label _status = new() { Text = "准备中", AutoSize = true, ForeColor = Color.FromArgb(89, 205, 184), Padding = new Padding(12, 15, 0, 0) };
-    private readonly Button _launch = Button("▶  启动游戏");
-    private readonly Button _stop = Button("停止会话");
-    private readonly TextBox _game = new() { Width = 620 };
-    private readonly TextBox _dotnet = new() { Width = 620 };
-    private readonly TextBox _arguments = new() { Width = 620, Height = 100, Multiline = true, ScrollBars = ScrollBars.Vertical };
-    private readonly CheckBox _hooks = new() { Text = "启用 Source 引擎 GameFrame Hook", AutoSize = true };
-    private readonly NumericUpDown _timeout = new() { Minimum = 10, Maximum = 600, Value = 90, Width = 100 };
+    private readonly TaskCompletionSource _initialized = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private HostSettings _settings = new();
     private RuntimeClient? _runtime;
     private ScanResult _catalog = new([], []);
-    private bool _refreshing, _busy, _closing, _closed;
+    private string _state = "connecting";
+    private bool _refreshing, _settingsLoaded, _closing, _closed;
     private string SettingsPath => Path.Combine(_root, "cgh_settings.json");
-    private readonly TaskCompletionSource _initialized = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public MainForm()
     {
-        Text = "ConsGHost · Con's GMod Host";
-        MinimumSize = new(1000, 740); Size = new(1200, 850); StartPosition = FormStartPosition.CenterScreen;
-        Font = new("Microsoft YaHei UI", 10); BackColor = Color.FromArgb(29, 35, 45); ForeColor = Color.Gainsboro;
-        var header = new Panel { Dock = DockStyle.Top, Height = 92, Padding = new(22, 12, 22, 8) };
-        header.Controls.Add(new Label { Text = "CGH  /  ConsGHost", Font = new(Font.FontFamily, 23, FontStyle.Bold), AutoSize = true, Location = new(22, 12) });
-        header.Controls.Add(new Label { Text = "Garry's Mod 64-bit  ·  Managed + Native  ·  .NET 10", AutoSize = true, Location = new(25, 58), ForeColor = Color.Silver });
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Right, Width = 475, Padding = new(0, 10, 0, 0) };
-        actions.Controls.AddRange([_launch, _stop, _status]); header.Controls.Add(actions);
-        var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterWidth = 6, Panel1MinSize = 260, Panel2MinSize = 120 };
-        split.Panel1.Controls.Add(_tabs); split.Panel2.Controls.Add(_log);
-        Controls.Add(split); Controls.Add(header);
-        BuildMods(); BuildExtras(); BuildSettings();
-        _tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
-        _tabs.ItemSize = new(120, 36);
-        _tabs.DrawItem += (_, e) =>
-        {
-            using var background = new SolidBrush(e.Index == _tabs.SelectedIndex ? Color.FromArgb(47, 79, 90) : BackColor);
-            e.Graphics.FillRectangle(background, e.Bounds);
-            TextRenderer.DrawText(e.Graphics, _tabs.TabPages[e.Index].Text, Font, e.Bounds, Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-        };
+        BuildInterface();
+        SetState("connecting");
         _launch.Click += async (_, _) => await LaunchAsync();
-        _stop.Click += async (_, _) => await GuardAsync(async () => { if (_runtime != null) await _runtime.SendAsync("stop"); });
-        Shown += async (_, _) => { split.SplitterDistance = Math.Max(300, split.Height - 235); await InitializeAsync(); };
+        _stop.Click += async (_, _) => await StopAsync();
+        Shown += async (_, _) => await InitializeAsync();
         FormClosing += OnClosing;
     }
-    private static DataGridView Grid() => new()
-    {
-        Dock = DockStyle.Fill, AllowUserToAddRows = false, AllowUserToDeleteRows = false, RowHeadersVisible = false,
-        SelectionMode = DataGridViewSelectionMode.FullRowSelect, MultiSelect = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-        ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize,
-        BackgroundColor = Color.FromArgb(34, 41, 53), BorderStyle = BorderStyle.None, AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells,
-        DefaultCellStyle = new() { BackColor = Color.FromArgb(34, 41, 53), ForeColor = Color.Gainsboro, SelectionBackColor = Color.FromArgb(51, 76, 95), SelectionForeColor = Color.White, Padding = new(5) },
-        ColumnHeadersDefaultCellStyle = new() { BackColor = Color.FromArgb(43, 52, 66), ForeColor = Color.White, Padding = new(4), WrapMode = DataGridViewTriState.True }, EnableHeadersVisualStyles = false
-    };
-    private static Button Button(string text) => new() { Text = text, AutoSize = true, Height = 38, FlatStyle = FlatStyle.Flat, Padding = new(9, 5, 9, 5), Margin = new(4), BackColor = Color.FromArgb(47, 66, 82), ForeColor = Color.White };
-    private TabPage Page(string name, string help, Control content, params Control[] buttons)
-    {
-        var page = new TabPage(name) { BackColor = BackColor, ForeColor = ForeColor, Padding = new(12) };
-        var toolbar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 50 }; toolbar.Controls.AddRange(buttons);
-        var label = new Label { Text = help, Dock = DockStyle.Bottom, Height = 45, Padding = new(0, 10, 0, 0), ForeColor = Color.Silver };
-        page.Controls.Add(content); page.Controls.Add(toolbar); page.Controls.Add(label); _tabs.TabPages.Add(page); return page;
-    }
-    private void BuildMods()
-    {
-        _mods.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Enabled", HeaderText = "启用", FillWeight = 35 });
-        foreach (var (name, title, width) in new[] { ("Name", "模组", 90), ("Id", "ID", 90), ("Version", "版本", 45), ("Mode", "运行位置", 65), ("Modules", "Managed / Native", 70), ("Description", "说明", 160) })
-            _mods.Columns.Add(new DataGridViewTextBoxColumn { Name = name, HeaderText = title, FillWeight = width, ReadOnly = true });
-        var refresh = Button("重新扫描"); refresh.Click += (_, _) => Guard(RefreshMods);
-        var open = Button("打开 Mods"); open.Click += (_, _) => OpenFolder(Path.Combine(_root, "Mods"));
-        var folder = Button("打开选中模组"); folder.Click += (_, _) => { if (_mods.CurrentRow?.Tag is ModSpec m) OpenFolder(m.Directory); };
-        var validate = Button("检查启动配置"); validate.Click += (_, _) => Guard(() => { SaveSettings(); var selected = SessionPreparation.Prepare(_root, _settings); Append("依赖检查通过：" + string.Join(" → ", selected.Select(m => m.Metadata.Id)), "info"); });
-        Page("模组管理", "扫描宿主同目录 Mods；启用状态、隔离方式与依赖关系在下一次启动时生效。", _mods, refresh, open, folder, validate);
-        _mods.CurrentCellDirtyStateChanged += (_, _) => { if (_mods.IsCurrentCellDirty) _mods.CommitEdit(DataGridViewDataErrorContexts.Commit); };
-        _mods.CellValueChanged += (_, e) =>
-        {
-            if (_refreshing || e.RowIndex < 0 || e.ColumnIndex != 0 || _mods.Rows[e.RowIndex].Tag is not ModSpec spec) return;
-            Guard(() =>
-            {
-                bool enabled = _mods.Rows[e.RowIndex].Cells[0].Value is true;
-                _settings.DisabledMods.RemoveAll(id => id == spec.Metadata.Id);
-                if (!enabled) _settings.DisabledMods.Add(spec.Metadata.Id);
-                Json.Write(SettingsPath, _settings);
-            });
-        };
-    }
-    private void BuildExtras()
-    {
-        _extras.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "启用", FillWeight = 30 });
-        _extras.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "DLL 目录", FillWeight = 220, ReadOnly = true });
-        _extras.Columns.Add(new DataGridViewCheckBoxColumn { HeaderText = "递归子目录", FillWeight = 50 });
-        var add = Button("增加目录"); add.Click += (_, _) => ChooseExtra(false);
-        var edit = Button("修改目录"); edit.Click += (_, _) => ChooseExtra(true);
-        var delete = Button("删除选中"); delete.Click += (_, _) => Guard(() => { if (_extras.CurrentRow?.Tag is ExtraLibraryDirectory e) _settings.ExtraLibraries.Remove(e); Json.Write(SettingsPath, _settings); RefreshExtras(); });
-        Page("额外 DLL", "启用目录中的 x64 原生 DLL 会在模组加载前进入 GMod 进程；这不是 .NET 程序集目录。", _extras, add, edit, delete);
-        _extras.CurrentCellDirtyStateChanged += (_, _) => { if (_extras.IsCurrentCellDirty) _extras.CommitEdit(DataGridViewDataErrorContexts.Commit); };
-        _extras.CellValueChanged += (_, e) =>
-        {
-            if (_refreshing || e.RowIndex < 0 || _extras.Rows[e.RowIndex].Tag is not ExtraLibraryDirectory entry) return;
-            Guard(() => { entry.Enabled = _extras.Rows[e.RowIndex].Cells[0].Value is true; entry.Recursive = _extras.Rows[e.RowIndex].Cells[2].Value is true; Json.Write(SettingsPath, _settings); });
-        };
-    }
-    private void ChooseExtra(bool edit)
-    {
-        using var dialog = new FolderBrowserDialog { Description = "选择包含 x64 原生依赖 DLL 的目录", UseDescriptionForTitle = true };
-        var selected = edit ? _extras.CurrentRow?.Tag as ExtraLibraryDirectory : null;
-        if (edit && selected == null) return;
-        if (selected != null) dialog.SelectedPath = selected.Path;
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        Guard(() =>
-        {
-            if (selected != null) selected.Path = dialog.SelectedPath;
-            else _settings.ExtraLibraries.Add(new() { Path = dialog.SelectedPath });
-            Json.Write(SettingsPath, _settings); RefreshExtras();
-        });
-    }
-    private void BuildSettings()
-    {
-        var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new(15) };
-        void Row(string label, Control control) { flow.Controls.Add(new Label { Text = label, AutoSize = true, Margin = new(3, 12, 3, 5) }); flow.Controls.Add(control); }
-        Row("Garry's Mod 目录（包含 gmod_win64.exe）", _game);
-        var browse = Button("浏览游戏目录"); browse.Click += (_, _) => { using var d = new FolderBrowserDialog { SelectedPath = _game.Text }; if (d.ShowDialog(this) == DialogResult.OK) _game.Text = d.SelectedPath; }; flow.Controls.Add(browse);
-        Row(".NET 10 x64 根目录", _dotnet);
-        Row("游戏参数（每行一个参数；引号无需手写）", _arguments);
-        flow.Controls.Add(_hooks); Row("启动超时（秒）", _timeout);
-        var save = Button("保存设置"); save.Click += (_, _) => Guard(() => { SaveSettings(); Append("设置已保存。", "info"); });
-        var logs = Button("打开会话日志"); logs.Click += (_, _) => OpenFolder(Path.Combine(_root, "Sessions"));
-        Page("设置", "默认 -insecure 适用于本地原生模组开发。引擎接口不兼容时会报告错误；LAPI 尚未包含在此版本。", flow, save, logs);
-    }
+
     private async Task InitializeAsync()
     {
         try
         {
             _settings = File.Exists(SettingsPath) ? Json.Read<HostSettings>(SettingsPath) : new();
             if (!File.Exists(SettingsPath)) Json.Write(SettingsPath, _settings);
-            _game.Text = _settings.GameDirectory; _dotnet.Text = _settings.DotnetRoot;
-            _arguments.Lines = _settings.GameArguments.ToArray(); _hooks.Checked = _settings.EnableEngineHooks;
+            _game.Text = _settings.GameDirectory;
+            _dotnet.Text = _settings.DotnetRoot;
+            _arguments.Lines = _settings.GameArguments.ToArray();
+            _hooks.Checked = _settings.EnableEngineHooks;
             _timeout.Value = Math.Clamp(_settings.StartupTimeoutSeconds, 10, 600);
-            RefreshMods(); RefreshExtras();
-            _runtime = new(_root); _runtime.Message += OnMessage; await _runtime.ConnectAsync();
-            Append("CGH Runtime 已连接；选择模组后即可启动。", "info");
+            RefreshMods();
+            RefreshExtras();
+            _settingsLoaded = true;
+            _runtime = new(_root);
+            _runtime.Message += OnMessage;
+            await _runtime.ConnectAsync();
+            Append($"CGH Runtime {CghVersion.Current} 已连接。", "info");
             _initialized.TrySetResult();
         }
-        catch (Exception error) { Append(error.ToString(), "error"); SetState("disconnected"); _initialized.TrySetException(error); }
+        catch (Exception error)
+        {
+            Append(error.ToString(), "error");
+            SetState("disconnected");
+            _initialized.TrySetException(error);
+        }
     }
+
     private void RefreshMods()
     {
         _catalog = ModCatalog.Scan(Path.Combine(_root, "Mods"));
+        PopulateMods();
+        foreach (var issue in _catalog.Issues) Append($"{issue.Directory}: {issue.Message}", "error");
+        Append($"扫描完成 · {_catalog.Mods.Count} 个模组，{_catalog.Issues.Count} 个问题。", "info");
+    }
+
+    private bool IsEnabled(ModSpec mod) => mod.Metadata.Enabled && !_settings.DisabledMods.Contains(mod.Metadata.Id);
+
+    private void PopulateMods()
+    {
+        string? selectedId = (_mods.CurrentRow?.Tag as ModSpec)?.Metadata.Id;
+        var query = _search.Text.Trim();
+        DataGridViewRow? selectedRow = null;
         _refreshing = true;
         try
         {
@@ -161,91 +75,429 @@ public sealed class MainForm : Form
             foreach (var mod in _catalog.Mods)
             {
                 var m = mod.Metadata;
-                int index = _mods.Rows.Add(m.Enabled && !_settings.DisabledMods.Contains(m.Id), m.Name, m.Id, m.Version,
-                    m.LoadAsSubprocess ? "独立子进程" : "GMod 进程", $"{mod.Managed.Count} / {mod.Native.Count}", m.Description);
-                _mods.Rows[index].Tag = mod;
-                if (!m.Enabled) { _mods.Rows[index].Cells[0].ReadOnly = true; _mods.Rows[index].Cells[5].ToolTipText = "元数据 enabled=false；请先修改元数据。"; }
+                if (!m.Name.Contains(query, StringComparison.OrdinalIgnoreCase) &&
+                    !m.Id.Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
+
+                int index = _mods.Rows.Add(IsEnabled(mod), m.Name, m.Version,
+                    m.LoadAsSubprocess ? "独立子进程" : "GMod 进程");
+                var row = _mods.Rows[index];
+                row.Tag = mod;
+                row.Cells[1].ToolTipText = m.Id;
+                if (!m.Enabled)
+                {
+                    row.Cells[0].ReadOnly = true;
+                    row.Cells[0].ToolTipText = "模组元数据已禁用此模组。";
+                }
+
+                if (m.Id == selectedId) selectedRow = row;
             }
+
+            if (_mods.RowCount > 0) _mods.CurrentCell = (selectedRow ?? _mods.Rows[0]).Cells[0];
         }
         finally { _refreshing = false; }
-        foreach (var issue in _catalog.Issues) Append(issue.Directory + ": " + issue.Message, "error");
-        Append($"扫描完成：{_catalog.Mods.Count} 个模组，{_catalog.Issues.Count} 个错误。", "info");
+
+        _modListTitle.Text = $"模组列表  ·  {_mods.RowCount}";
+        _modEmpty.Text = _catalog.Mods.Count == 0
+            ? "未发现模组。将模组放入 Mods 后重新扫描。"
+            : "没有匹配的模组。试试其他名称或 ID。";
+        _mods.Visible = _mods.RowCount > 0;
+        _modEmpty.Visible = _mods.RowCount == 0;
+        UpdateModSummary();
+        UpdateModDetails();
     }
-    private void RefreshExtras()
+
+    private void UpdateModSummary()
+    {
+        _modCount.Text = _catalog.Mods.Count.ToString();
+        _enabledCount.Text = _catalog.Mods.Count(IsEnabled).ToString();
+        _issueCount.Text = _catalog.Issues.Count.ToString();
+        _issueCount.ForeColor = _catalog.Issues.Count > 0 ? Warning : HostTheme.Text;
+    }
+
+    private void UpdateModDetails()
+    {
+        var mod = _mods.CurrentRow?.Tag as ModSpec;
+        _modFolder.Enabled = mod != null;
+        _modDetails.Clear();
+
+        void Line(string text, Font? font = null, Color? color = null)
+        {
+            _modDetails.SelectionFont = font ?? Body;
+            _modDetails.SelectionColor = color ?? HostTheme.Text;
+            _modDetails.AppendText(text + Environment.NewLine);
+        }
+
+        if (mod == null)
+        {
+            Line("选择一个模组，查看它的版本、模块与依赖。", color: Muted);
+            return;
+        }
+
+        var m = mod.Metadata;
+        bool enabled = IsEnabled(mod);
+        string status = !m.Enabled ? "元数据已禁用" : enabled ? "已启用" : "已停用";
+        Line(m.Name, Strong);
+        Line($"{m.Id}  ·  v{m.Version}", Small, Muted);
+        Line("");
+        Line($"{status}  ·  {(m.LoadAsSubprocess ? "独立子进程" : "GMod 进程")}", Strong, enabled ? Good : Muted);
+        Line($"Managed  {mod.Managed.Count}  /  Native  {mod.Native.Count}", Small, Muted);
+        if (!string.IsNullOrWhiteSpace(m.Author)) Line($"作者  {m.Author}", Small, Muted);
+        if (!string.IsNullOrWhiteSpace(m.Description))
+        {
+            Line("");
+            Line(m.Description);
+        }
+        if (mod.Addons.Count > 0)
+        {
+            Line("");
+            Line("GMod 插件", Strong);
+            foreach (var addon in mod.Addons)
+                Line(addon.Name + (addon.Ignored ? "  （已忽略）" : ""), Small, Muted);
+        }
+        if (m.Dependencies.Count > 0)
+        {
+            Line("");
+            Line("依赖", Strong);
+            foreach (var dependency in m.Dependencies)
+            {
+                string version = dependency.MinVersion == null ? "" : $"  ≥ {dependency.MinVersion}";
+                if (dependency.MaxVersionExclusive != null) version += $"  < {dependency.MaxVersionExclusive}";
+                Line(dependency.Id + version + (dependency.Optional ? "  （可选）" : ""), Small, Muted);
+            }
+        }
+
+        if (m.LoadAfter.Count > 0)
+        {
+            Line("");
+            Line("在以下模组之后加载", Strong);
+            foreach (string id in m.LoadAfter) Line(id, Small, Muted);
+        }
+
+        _modDetails.Select(0, 0);
+        _modDetails.ScrollToCaret();
+    }
+
+    private void OnModChanged(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (_refreshing || e.RowIndex < 0 || e.ColumnIndex != 0 || _mods.Rows[e.RowIndex].Tag is not ModSpec mod) return;
+        var cell = _mods.Rows[e.RowIndex].Cells[0];
+        bool enabled = cell.Value is true;
+        try
+        {
+            var disabled = _settings.DisabledMods.Where(id => id != mod.Metadata.Id).ToList();
+            if (!enabled) disabled.Add(mod.Metadata.Id);
+            Persist(_settings with { DisabledMods = disabled });
+        }
+        catch (Exception error)
+        {
+            RestoreCheckbox(cell, IsEnabled(mod));
+            ReportError(error);
+        }
+        UpdateModSummary();
+        UpdateModDetails();
+    }
+
+    private void RefreshExtras(int selection = 0)
     {
         _refreshing = true;
-        try { _extras.Rows.Clear(); foreach (var e in _settings.ExtraLibraries) { int index = _extras.Rows.Add(e.Enabled, e.Path, e.Recursive); _extras.Rows[index].Tag = e; } }
+        try
+        {
+            _extras.Rows.Clear();
+            foreach (var entry in _settings.ExtraLibraries) _extras.Rows.Add(entry.Enabled, entry.Path, entry.Recursive);
+            if (_extras.RowCount > 0) _extras.CurrentCell = _extras.Rows[Math.Min(selection, _extras.RowCount - 1)].Cells[1];
+        }
+        finally { _refreshing = false; }
+
+        _extras.Visible = _extras.RowCount > 0;
+        _extraEmpty.Visible = _extras.RowCount == 0;
+        UpdateExtraActions();
+        UpdateExtraSummary();
+    }
+
+    private void UpdateExtraActions()
+    {
+        _editExtra.Enabled = _deleteExtra.Enabled = _extras.CurrentRow != null;
+    }
+
+    private void UpdateExtraSummary()
+    {
+        _extraSummary.Text = $"{_settings.ExtraLibraries.Count} 个目录  ·  {_settings.ExtraLibraries.Count(e => e.Enabled)} 个已启用";
+    }
+
+    private void OnExtraChanged(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (_refreshing || e.RowIndex < 0 || e.ColumnIndex is not (0 or 2)) return;
+        var entry = _settings.ExtraLibraries[e.RowIndex];
+        var cell = _extras.Rows[e.RowIndex].Cells[e.ColumnIndex];
+        bool isEnabledCell = e.ColumnIndex == 0;
+        var updated = isEnabledCell ? entry with { Enabled = cell.Value is true } : entry with { Recursive = cell.Value is true };
+        try { UpdateExtra(e.RowIndex, updated); }
+        catch (Exception error)
+        {
+            RestoreCheckbox(cell, isEnabledCell ? entry.Enabled : entry.Recursive);
+            ReportError(error);
+        }
+        UpdateExtraSummary();
+    }
+
+    private void RestoreCheckbox(DataGridViewCell cell, bool value)
+    {
+        _refreshing = true;
+        try { cell.Value = value; }
         finally { _refreshing = false; }
     }
-    private void SaveSettings()
+
+    private void ChooseExtra(bool edit)
     {
-        _settings.GameDirectory = _game.Text.Trim(); _settings.DotnetRoot = _dotnet.Text.Trim();
-        _settings.GameArguments = _arguments.Lines.Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
-        _settings.EnableEngineHooks = _hooks.Checked; _settings.StartupTimeoutSeconds = (int)_timeout.Value;
-        Json.Write(SettingsPath, _settings);
+        int index = edit ? _extras.CurrentRow?.Index ?? -1 : _settings.ExtraLibraries.Count;
+        if (index < 0) return;
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = "选择包含 x64 原生 DLL 的目录", UseDescriptionForTitle = true,
+            SelectedPath = edit ? _settings.ExtraLibraries[index].Path : ""
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        Guard(() =>
+        {
+            var entry = edit ? _settings.ExtraLibraries[index] with { Path = dialog.SelectedPath } : new() { Path = dialog.SelectedPath };
+            UpdateExtra(index, entry);
+            RefreshExtras(index);
+        });
     }
-    private async Task LaunchAsync() => await GuardAsync(async () =>
+
+    private void DeleteExtra()
     {
-        if (_busy || _runtime == null) return;
-        SaveSettings(); RefreshMods(); _ = SessionPreparation.Prepare(_root, _settings);
-        SetState("starting"); await _runtime.SendAsync("launch");
+        if (_extras.CurrentRow is not { } row) return;
+        UpdateExtra(row.Index, null);
+        RefreshExtras(row.Index);
+    }
+
+    private void UpdateExtra(int index, ExtraLibraryDirectory? entry)
+    {
+        var entries = _settings.ExtraLibraries.ToList();
+        if (entry == null) entries.RemoveAt(index);
+        else if (index == entries.Count) entries.Add(entry);
+        else entries[index] = entry;
+        Persist(_settings with { ExtraLibraries = entries });
+    }
+
+    private void SaveSettings() => Persist(_settings with
+    {
+        GameDirectory = _game.Text.Trim(),
+        DotnetRoot = _dotnet.Text.Trim(),
+        GameArguments = _arguments.Lines.Where(s => !string.IsNullOrWhiteSpace(s)).ToList(),
+        EnableEngineHooks = _hooks.Checked,
+        StartupTimeoutSeconds = (int)_timeout.Value
     });
+
+    private void Persist(HostSettings settings)
+    {
+        Json.Write(SettingsPath, settings);
+        _settings = settings;
+    }
+
+    private void CheckLaunchConfiguration()
+    {
+        SaveSettings();
+        var selected = SessionPreparation.Prepare(_root, _settings);
+        SetLogExpanded(true);
+        Append(selected.Count == 0 ? "启动配置检查通过。当前没有已启用的模组。"
+            : "启动配置检查通过 · " + string.Join(" → ", selected.Select(m => m.Metadata.Id)), "info");
+    }
+
+    private async Task LaunchAsync()
+    {
+        if (!_launch.Enabled || _runtime == null) return;
+        try
+        {
+            SaveSettings();
+            RefreshMods();
+            _ = SessionPreparation.Prepare(_root, _settings);
+            SetState("starting");
+            await _runtime.SendAsync("launch");
+        }
+        catch (Exception error)
+        {
+            if (_state == "starting") SetState("idle");
+            ReportError(error);
+        }
+    }
+
+    private async Task StopAsync()
+    {
+        if (!_stop.Enabled || _runtime == null) return;
+        _stop.Enabled = false;
+        try { await _runtime.SendAsync("stop"); }
+        catch (Exception error)
+        {
+            _stop.Enabled = _state is "starting" or "running";
+            ReportError(error);
+        }
+    }
+
     private void OnMessage(WireMessage message)
     {
         if (IsDisposed || !IsHandleCreated || _closing) return;
         BeginInvoke(() =>
         {
-            if (message.Kind == "state") SetState(message.Text ?? "unknown", message.ProcessId);
-            else Append($"{(message.Mod ?? message.Endpoint ?? "runtime")}: {message.Text}", message.Kind == "fault" ? "error" : message.Level ?? "info");
+            if (_closing) return;
+            if (message.Kind == "state") SetState(message.Text ?? "disconnected", message.ProcessId);
+            else Append($"{message.Mod ?? message.Endpoint ?? "runtime"}: {message.Text}",
+                message.Kind == "fault" ? "error" : message.Level ?? "info");
         });
     }
+
     private void SetState(string state, int pid = 0)
     {
-        _busy = state is "starting" or "running" or "stopping";
-        _launch.Enabled = !_busy && state != "disconnected"; _stop.Enabled = state is "starting" or "running";
-        _tabs.Enabled = !_busy;
-        _status.Text = state switch { "idle" => "就绪", "starting" => "启动中…", "running" => $"运行中 · {pid}", "stopping" => "停止中…", _ => "未连接" };
+        _state = state;
+        bool busy = state is "starting" or "running" or "stopping";
+        _launch.Enabled = state == "idle";
+        _stop.Enabled = state is "starting" or "running";
+        _workspace.Enabled = _settingsLoaded && !busy;
+        (_status.Text, _status.ForeColor) = state switch
+        {
+            "connecting" => ("●  连接中", Warning),
+            "idle" => ("●  就绪", Good),
+            "starting" => ("●  启动中", Warning),
+            "running" => ($"●  运行中 · PID {pid}", Good),
+            "stopping" => ("●  停止中", Warning),
+            _ => ("●  未连接", Error)
+        };
     }
-    private void Append(string text, string level)
+
+    private void Append(string message, string level)
     {
-        if (_log.TextLength > 250000) { _log.Select(0, 100000); _log.SelectedText = ""; }
-        _log.SelectionStart = _log.TextLength;
-        _log.SelectionColor = level == "error" ? Color.Salmon : level == "warning" ? Color.Khaki : Color.Gainsboro;
-        _log.AppendText($"[{DateTime.Now:HH:mm:ss}] {text}{Environment.NewLine}"); _log.ScrollToCaret();
+        bool error = level == "error";
+        _logEntries++;
+        if (error) _logErrors++;
+        if (_log.TextLength > 250000)
+        {
+            _log.Select(0, 100000);
+            _log.SelectedText = "";
+        }
+        _log.Select(_log.TextLength, 0);
+        _log.SelectionColor = error ? Error : level == "warning" ? Warning : Muted;
+        _log.AppendText($"[{DateTime.Now:HH:mm:ss}]  {message}{Environment.NewLine}");
+        _log.ScrollToCaret();
+        UpdateLogSummary();
     }
-    private void OpenFolder(string path) => Guard(() => { Directory.CreateDirectory(path); Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); });
-    private void Guard(Action action) { try { action(); } catch (Exception e) { Append(e.Message, "error"); } }
-    private async Task GuardAsync(Func<Task> action) { try { await action(); } catch (Exception e) { Append(e.Message, "error"); SetState("idle"); } }
+
+    private void OpenFolder(string path) => Guard(() =>
+    {
+        Directory.CreateDirectory(path);
+        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+    });
+
+    private void Guard(Action action)
+    {
+        try { action(); }
+        catch (Exception error) { ReportError(error); }
+    }
+
+    private void ReportError(Exception error)
+    {
+        SetLogExpanded(true);
+        Append(error.Message, "error");
+    }
+
     private async void OnClosing(object? sender, FormClosingEventArgs e)
     {
         if (_closed) return;
-        e.Cancel = true; if (_closing) return; _closing = true; Enabled = false;
-        try { SaveSettings(); if (_runtime != null) await _runtime.DisposeAsync(); }
-        finally { _closed = true; Close(); }
+        e.Cancel = true;
+        if (_closing) return;
+        _closing = true;
+        Enabled = false;
+        try
+        {
+            if (_settingsLoaded) SaveSettings();
+        }
+        catch (Exception error)
+        {
+            _closing = false;
+            Enabled = true;
+            ReportError(error);
+            return;
+        }
+
+        try
+        {
+            if (_runtime != null) await _runtime.DisposeAsync();
+        }
+        finally
+        {
+            _closed = true;
+            Close();
+        }
     }
-    /// <summary>In-app diagnostic rendering and persistence check; does not launch the game.</summary>
+
+    /// <summary>Renders the normal desktop pages and checks UI state and persistence without launching the game.</summary>
     public async Task CheckAndRenderAsync(string output)
     {
         await _initialized.Task.WaitAsync(TimeSpan.FromSeconds(20));
         await Task.Delay(200);
-        if (_mods.Rows.Count != _catalog.Mods.Count || _tabs.TabPages.Count != 3 || !_launch.Enabled)
+        if (_mods.Rows.Count != _catalog.Mods.Count || _pages.Count != 3 || !_launch.Enabled ||
+            Text != $"ConsGHost {CghVersion.Current}")
             throw new InvalidOperationException("Host initial UI state is inconsistent.");
+
         Directory.CreateDirectory(output);
-        if (_mods.Rows.Count > 0 && _mods.Rows[0].Tag is ModSpec mod && mod.Metadata.Enabled)
+        if (_mods.Rows.Count > 0 && _mods.Rows[0].Tag is ModSpec mod)
         {
-            bool initial = _mods.Rows[0].Cells[0].Value is true;
-            _mods.Rows[0].Cells[0].Value = !initial;
-            if (Json.Read<HostSettings>(SettingsPath).DisabledMods.Contains(mod.Metadata.Id) != initial)
-                throw new InvalidOperationException("Mod enable/disable persistence failed.");
-            _mods.Rows[0].Cells[0].Value = initial;
+            _search.Text = Guid.NewGuid().ToString("N");
+            if (_mods.Rows.Count != 0 || !_modEmpty.Visible || _modFolder.Enabled)
+                throw new InvalidOperationException("Mod search did not show its empty state.");
+
+            _search.Text = mod.Metadata.Id;
+            var row = _mods.Rows.Cast<DataGridViewRow>().First(row => ReferenceEquals(row.Tag, mod));
+            if (mod.Metadata.Enabled)
+                CheckToggle(row.Cells[0], settings => !settings.DisabledMods.Contains(mod.Metadata.Id));
+            _search.Clear();
         }
+
+        _pages[1].Navigation.PerformClick();
+        if (_extras.Rows.Count == 0 && (!_extraEmpty.Visible || _editExtra.Enabled || _deleteExtra.Enabled))
+            throw new InvalidOperationException("Extra DLL empty state is inconsistent.");
+        if (_extras.Rows.Count > 0)
+        {
+            CheckToggle(_extras.Rows[0].Cells[0], settings => settings.ExtraLibraries[0].Enabled);
+            CheckToggle(_extras.Rows[0].Cells[2], settings => settings.ExtraLibraries[0].Recursive);
+        }
+
         SaveSettings();
-        for (int i = 0; i < _tabs.TabPages.Count; ++i)
+        for (int i = 0; i < _pages.Count; ++i)
         {
-            _tabs.SelectedIndex = i; await Task.Delay(100);
-            using var bitmap = new Bitmap(Width, Height); DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size));
-            bitmap.Save(Path.Combine(output, $"page-{i}.png"));
+            _pages[i].Navigation.PerformClick();
+            if (!_pages[i].Content.Visible || _title.Text != _pages[i].Title)
+                throw new InvalidOperationException("Workspace navigation did not activate the expected page.");
+            await RenderAsync($"page-{i}.png");
         }
-        File.WriteAllText(Path.Combine(output, "result.txt"), "PASS: runtime connected, 3 pages rendered, mod toggle persisted and restored, settings saved.");
+
+        SetLogExpanded(false);
+        if (_log.Visible || _shell.RowStyles[2].Height != LogicalToDeviceUnits(64))
+            throw new InvalidOperationException("Log panel did not collapse.");
+        Size = MinimumSize;
+        await RenderAsync("compact-settings.png");
+
+        File.WriteAllText(Path.Combine(output, "result.txt"),
+            "PASS: runtime connected, 3 pages rendered, navigation, search, persistence, DLL page and log collapse checked.");
+
+        void CheckToggle(DataGridViewCell cell, Func<HostSettings, bool> readValue)
+        {
+            bool initial = cell.Value is true;
+            try
+            {
+                cell.Value = !initial;
+                if (readValue(Json.Read<HostSettings>(SettingsPath)) != !initial)
+                    throw new InvalidOperationException("Checkbox persistence failed.");
+            }
+            finally { cell.Value = initial; }
+        }
+
+        async Task RenderAsync(string file)
+        {
+            await Task.Delay(100);
+            using var bitmap = new Bitmap(Width, Height);
+            DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size));
+            bitmap.Save(Path.Combine(output, file));
+        }
     }
 }

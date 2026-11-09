@@ -20,6 +20,7 @@
     "loadAsSubprocess": {"type": "boolean", "default": false},
     "managedAssemblies": {"$ref": "#/$defs/files"},
     "nativeLibraries": {"$ref": "#/$defs/files"},
+    "ignoredAddons": {"type": "array", "items": {"type": "string", "minLength": 1, "pattern": "^[^/\\\\:*?\"<>|]+$"}},
     "loadAfter": {"type": "array", "items": {"$ref": "#/$defs/id"}},
     "dependencies": {
       "type": "array",

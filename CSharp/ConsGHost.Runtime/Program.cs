@@ -2,6 +2,21 @@ using System.IO.Pipes;
 using ConsGHost.Core;
 using ConsGHost.Runtime;
 
+if (args is ["--version"])
+{
+    Console.WriteLine(CghVersion.Current);
+    return 0;
+}
+if (args is ["--verify-version", var directory])
+{
+    try
+    {
+        CghVersion.VerifyDistribution(Path.GetFullPath(directory));
+        Console.WriteLine(CghVersion.Current);
+        return 0;
+    }
+    catch (Exception e) { Console.Error.WriteLine(e.Message); return 1; }
+}
 if (args.Length == 2 && args[0] == "--validate")
 {
     try
@@ -15,7 +30,7 @@ if (args.Length == 2 && args[0] == "--validate")
 }
 if (args.Length != 4 || args[0] != "--serve")
 {
-    Console.Error.WriteLine("ConsGHost.Runtime --serve PIPE TOKEN ROOT | --validate ROOT"); return 2;
+    Console.Error.WriteLine("ConsGHost.Runtime --version | --verify-version ROOT | --validate ROOT | --serve PIPE TOKEN ROOT"); return 2;
 }
 var distribution = Path.GetFullPath(args[3]);
 await using var pipe = new NamedPipeServerStream(args[1], PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);

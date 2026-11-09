@@ -25,6 +25,11 @@ try
     var invalid = Path.Combine(output, "catalog", "Invalid"); Directory.CreateDirectory(invalid);
     File.WriteAllText(Path.Combine(invalid, "cghm_metadata.json"), "{\"id\":\"bad\",\"name\":\"bad\",\"version\":\"1.0.0\",\"typoField\":true}");
     Check(ModCatalog.Scan(Path.GetDirectoryName(invalid)!).Issues.Count == 1, "unknown metadata field diagnosed");
+    Json.Write(Path.Combine(invalid, "cghm_metadata.json"), new ModMetadata
+    {
+        Id = "bad", Name = "bad", Version = "1.0.0", IgnoredAddons = ["../outside"]
+    });
+    Check(ModCatalog.Scan(Path.GetDirectoryName(invalid)!).Issues.Single().Message.Contains("ignoredAddons"), "addon ignore entries reject paths");
     await using (var memory = new MemoryStream())
     {
         await using var writer = new Wire(memory);
@@ -42,19 +47,86 @@ try
     var game = Path.Combine(output, "fixture-game"); Directory.CreateDirectory(game);
     var extra = Path.Combine(output, "extras"); Directory.CreateDirectory(extra);
     File.Copy(Path.Combine(repo, "Cpp/build/Release/cgh_test_game.exe"), Path.Combine(game, "gmod_win64.exe"));
+    CghVersion.VerifyDistribution(distribution);
+    Check(CghVersion.Current == File.ReadAllText(Path.Combine(repo, "VERSION")).Trim(), "distribution matches source CGH version");
+    var nativeRuntime = Path.Combine(distribution, "cgh_runtime_win64.dll");
+    File.Move(nativeRuntime, nativeRuntime + ".original");
+    try
+    {
+        File.Copy(Path.Combine(repo, "Cpp/build/Release/cgh_test_extra.dll"), nativeRuntime);
+        Reject(() => CghVersion.VerifyDistribution(distribution), "unversioned native component rejected");
+    }
+    finally { File.Move(nativeRuntime + ".original", nativeRuntime, overwrite: true); }
     File.Copy(Path.Combine(repo, "Cpp/build/Release/server.dll"), Path.Combine(game, "server.dll"));
     File.Copy(Path.Combine(repo, "Cpp/build/Release/cgh_test_extra.dll"), Path.Combine(extra, "cgh_test_extra.dll"));
     var settings = new HostSettings { GameDirectory = game, GameArguments = ["45"], ExtraLibraries = [new() { Path = extra }] };
     if (real) { settings.GameDirectory = @"L:\SteamLibrary\steamapps\common\GarrysMod"; settings.GameArguments = ["-console", "-novid", "-insecure", "-noaddons", "-noworkshop", "-windowed", "-w", "1024", "-h", "768", "+map", "gm_construct"]; settings.StartupTimeoutSeconds = 120; }
+    var gameAddons = Path.Combine(game, "garrysmod", "addons");
+    var stageRoot = Path.Combine(game, "garrysmod", ".cgh-addons");
+    var addonSource = Path.Combine(distribution, "Mods", "AddonFixture", "Addons");
+    var existingAddon = Path.Combine(gameAddons, "cgh_" + Guid.NewGuid().ToString("N"));
+    if (!real)
+    {
+        // Exercise an unrelated installed addon and owned leftovers from an interrupted Runtime.
+        Directory.CreateDirectory(existingAddon);
+        File.WriteAllText(Path.Combine(existingAddon, "preserve.txt"), "pre-existing addon");
+        Directory.CreateDirectory(stageRoot);
+        foreach (var parent in new[] { gameAddons, stageRoot })
+        {
+            var name = "cgh_" + Guid.NewGuid().ToString("N");
+            var stale = Path.Combine(parent, name);
+            Directory.CreateDirectory(stale);
+            File.WriteAllText(Path.Combine(stageRoot, name + ".owner"), name);
+        }
+        Directory.CreateDirectory(addonSource);
+        Json.Write(Path.Combine(Path.GetDirectoryName(addonSource)!, "cghm_metadata.json"), new ModMetadata
+        {
+            Id = "fixture.addons", Name = "Addon fixtures", Version = "1.0.0", IgnoredAddons = ["IGNORE-ME", "SKIP.GMA", "not-installed"]
+        });
+        foreach (var name in new[] { "folder-one", "folder-two", "ignore-me" })
+        {
+            var autorun = Path.Combine(addonSource, name, "lua", "autorun");
+            Directory.CreateDirectory(autorun);
+            File.WriteAllText(Path.Combine(autorun, name + ".lua"), "-- fixture");
+        }
+        WriteGma(Path.Combine(addonSource, "archive.GMA"), "lua/autorun/packed.lua", "-- archive fixture");
+        File.WriteAllText(Path.Combine(addonSource, "skip.gma"), "ignored invalid archive");
+        File.WriteAllText(Path.Combine(addonSource, "readme.txt"), "not an addon");
+        var disabled = Path.Combine(distribution, "Mods", "DisabledAddon");
+        Directory.CreateDirectory(Path.Combine(disabled, "Addons", "disabled-addon"));
+        Json.Write(Path.Combine(disabled, "cghm_metadata.json"), new ModMetadata { Id = "fixture.disabled", Name = "Disabled addon", Version = "1.0.0" });
+        settings.DisabledMods.Add("fixture.disabled");
+        var discovered = ModCatalog.Scan(Path.Combine(distribution, "Mods")).Mods.Single(mod => mod.Metadata.Id == "fixture.addons").Addons;
+        Check(discovered.Count == 5 && discovered.Count(addon => addon.Ignored) == 2, "scan standard folders and GMA, match ignore names case-insensitively");
+    }
     Json.Write(Path.Combine(distribution, "cgh_settings.json"), settings);
     var messages = new ConcurrentQueue<WireMessage>();
     await using var client = new RuntimeClient(distribution);
     client.Message += m => { messages.Enqueue(m); if (m.Kind != "heartbeat") Console.WriteLine($"  {m.Kind} {m.Endpoint} {m.Mod}: {m.Text}"); };
-    await client.ConnectAsync();
+    string? previousHeap = Environment.GetEnvironmentVariable("_no_debug_heap");
+    string? previousInherited = Environment.GetEnvironmentVariable("CGH_TEST_INHERITED");
+    try
+    {
+        if (!real)
+        {
+            Environment.SetEnvironmentVariable("_no_debug_heap", "0");
+            Environment.SetEnvironmentVariable("CGH_TEST_INHERITED", "path中");
+        }
+        await client.ConnectAsync();
+    }
+    finally
+    {
+        if (!real)
+        {
+            Environment.SetEnvironmentVariable("_no_debug_heap", previousHeap);
+            Environment.SetEnvironmentVariable("CGH_TEST_INHERITED", previousInherited);
+        }
+    }
     await Until(() => messages.Any(m => m.Kind == "state" && m.Text == "idle"), "runtime handshake", 20);
     await client.SendAsync("launch");
     await Until(() => messages.Any(m => m.Kind == "state" && m.Text == "running"), "controlled process launch", 150, messages);
     Check(true, real ? "real GMod bootstrapped and mod startup acknowledged" : "fixture game bootstrapped before entry and mod startup acknowledged");
+    Check(messages.Any(m => m.Kind == "log" && m.Text == $"CGH version: {CghVersion.Current}"), "session records CGH version");
     await Until(() => messages.Any(m => m.Text?.Contains("round trip passed") == true), "cross-process bridge", 20, messages);
     Check(true, "game and isolated mod message round trip");
     await Until(() => messages.Any(m => m.Text?.Contains("Engine GameFrame callback active") == true), "engine frames", real ? 150 : 20, messages);
@@ -66,7 +138,24 @@ try
     Check(messages.Any(m => m.Text?.Contains("Native -> managed direct service call passed") == true), "native to C# service");
     Check(messages.Any(m => m.Text?.Contains("Managed -> native direct service call passed") == true), "C# to native service");
     Check(messages.Any(m => m.Text?.Contains("Extra dependency fixture loaded") == true), "extra DLL loaded in game runtime");
-    if (!real) Check(messages.Any(m => m.Text == "CGH_EXTRA_PROBE=42"), "game can invoke extra dependency export");
+    if (!real)
+    {
+        Check(messages.Any(m => m.Text == "CGH_EXTRA_PROBE=42"), "game can invoke extra dependency export");
+        Check(messages.Any(m => m.Text == "CGH game environment verified"), "game overrides debug heap and inherits Unicode environment");
+        var staged = Directory.GetDirectories(gameAddons).Where(path => path != existingAddon).ToArray();
+        Check(staged.Length == 3 && !Directory.EnumerateDirectories(stageRoot).Any(), "stage only selected addons and recover stale copies");
+        Check(staged.SelectMany(path => Directory.GetFiles(path, "*.lua", SearchOption.AllDirectories)).Select(Path.GetFileName)
+            .Order().SequenceEqual(["folder-one.lua", "folder-two.lua", "packed.lua"]), "stage multiple folder addons and expand GMA using its directory structure");
+        Check(File.ReadAllText(staged.SelectMany(path => Directory.GetFiles(path, "packed.lua", SearchOption.AllDirectories)).Single())
+            == "-- archive fixture", "extract GMA file payload intact");
+        await using var competing = new RuntimeClient(distribution);
+        var reservationFault = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        competing.Message += m => { if (m.Kind == "fault") reservationFault.TrySetResult(m.Text ?? ""); };
+        await competing.ConnectAsync();
+        await competing.SendAsync("launch");
+        Check((await reservationFault.Task.WaitAsync(TimeSpan.FromSeconds(15))).Contains("reserve GMod addon staging") &&
+            staged.All(Directory.Exists), "a concurrent CGH session cannot remove the active addon's copies");
+    }
     var metrics = Path.Combine(distribution, "Data/cgh.example/bridge-metrics.json"); Check(File.Exists(metrics), "100000-call bridge stress completed");
     Console.WriteLine("  " + File.ReadAllText(metrics));
     await client.SendAsync("stop");
@@ -78,6 +167,45 @@ try
     Check(!IsAlive(started.ProcessId), "owned game process cleaned up");
     if (!real)
     {
+        Check(Directory.GetDirectories(gameAddons).SequenceEqual([existingAddon]) && !Directory.EnumerateFileSystemEntries(stageRoot).Any() &&
+            File.Exists(Path.Combine(existingAddon, "preserve.txt")), "stop removes only CGH addon copies");
+
+        // An error after several successful copies rolls them all back and releases the game lease.
+        var lockedDirectory = Path.Combine(addonSource, "zz-locked");
+        Directory.CreateDirectory(lockedDirectory);
+        using (File.Create(Path.Combine(lockedDirectory, "locked.dat")))
+        {
+            messages.Clear();
+            await client.SendAsync("launch");
+            await Until(() => messages.Any(m => m.Kind == "fault" && m.Text?.Contains("zz-locked") == true), "addon staging failure", 20);
+            await Until(() => messages.Count(m => m.Kind == "state" && m.Text == "idle") >= 2, "failed addon stage cleanup", 20);
+            Check(Directory.GetDirectories(gameAddons).SequenceEqual([existingAddon]) && !Directory.EnumerateFileSystemEntries(stageRoot).Any(),
+                "addon copy failure rolls back partial stage");
+        }
+        Directory.Delete(lockedDirectory, recursive: true);
+
+        var maliciousGma = Path.Combine(addonSource, "zz-escape.gma");
+        WriteGma(maliciousGma, "../escape.lua", "-- should not be written");
+        messages.Clear();
+        await client.SendAsync("launch");
+        await Until(() => messages.Any(m => m.Kind == "fault" && m.Text?.Contains("Unsafe path in GMAD") == true), "GMA path traversal", 20);
+        await Until(() => messages.Count(m => m.Kind == "state" && m.Text == "idle") >= 2, "rejected GMA cleanup", 20);
+        Check(Directory.GetDirectories(gameAddons).SequenceEqual([existingAddon]) && !Directory.EnumerateFileSystemEntries(stageRoot).Any(),
+            "reject escaping GMA paths and roll back staging");
+        File.Delete(maliciousGma);
+
+        settings.GameArguments = ["45", "0", "-NOADDONS"];
+        Json.Write(Path.Combine(distribution, "cgh_settings.json"), settings);
+        messages.Clear();
+        await client.SendAsync("launch");
+        await Until(() => messages.Any(m => m.Kind == "state" && m.Text == "running"), "launch with -noaddons", 20, messages);
+        Check(Directory.GetDirectories(gameAddons).SequenceEqual([existingAddon]) &&
+            messages.Any(m => m.Text?.Contains("addon loading skipped") == true), "respect the -noaddons game argument");
+        await client.SendAsync("stop");
+        await Until(() => messages.Any(m => m.Kind == "state" && m.Text == "idle"), "stop with -noaddons", 20);
+        settings.GameArguments = ["45"];
+        Json.Write(Path.Combine(distribution, "cgh_settings.json"), settings);
+
         messages.Clear(); await client.SendAsync("launch");
         await Until(() => messages.Any(m => m.Kind == "state" && m.Text == "running"), "second session", 90, messages);
         Check(true, "relaunch after stop");
@@ -105,7 +233,7 @@ try
         await Until(() => messages.Any(m => m.Kind == "fault" && m.Text?.Contains("EXPECTED_LOAD_FAILURE") == true), "failed mod Load", 90);
         await Until(() => messages.Any(m => m.Kind == "state" && m.Text == "idle"), "failed Load rollback", 30);
         Check(!messages.Any(m => m.Kind == "state" && m.Text == "running"), "failed Load rejected and rolled back");
-        settings.DisabledMods = ["cgh.failure"]; Json.Write(Path.Combine(distribution, "cgh_settings.json"), settings);
+        settings.DisabledMods.Add("cgh.failure"); Json.Write(Path.Combine(distribution, "cgh_settings.json"), settings);
         messages.Clear(); await client.SendAsync("launch");
         await Until(() => messages.Any(m => m.Kind == "state" && m.Text == "starting"), "launch begins", 20);
         await client.SendAsync("stop");
@@ -121,6 +249,22 @@ try
         Check(messages.Any(m => m.Text == "Native module loaded in isolated MRT"), "native module hosted in per-mod MRT");
         Check(messages.Any(m => m.Text == "Managed -> native direct service call passed"), "isolated C# and C++ retain direct bridge");
         await client.SendAsync("stop"); await Until(() => messages.Any(m => m.Kind == "state" && m.Text == "idle"), "isolated session stop", 40);
+
+        settings.DisabledMods.AddRange(["cgh.example", "cgh.observer"]);
+        foreach (int exitCode in new[] { 0, 23 })
+        {
+            settings.GameArguments = ["2", exitCode.ToString()];
+            Json.Write(Path.Combine(distribution, "cgh_settings.json"), settings);
+            messages.Clear(); await client.SendAsync("launch");
+            await Until(() => messages.Any(m => m.Kind == "state" && m.Text == "running"), "natural game launch", 20, messages);
+            await Until(() => messages.Any(m => m.Kind == "state" && m.Text == "idle"), "natural game exit", 15);
+            var faults = messages.Where(m => m.Kind is "fault" or "fatal").ToArray();
+            Check(messages.Any(m => m.Kind == "log" && m.Text == $"Game exited: {exitCode}"), $"natural exit reports game code {exitCode}");
+            Check(exitCode == 0 ? faults.Length == 0 : faults.Length == 1 && faults[0].Text == $"Game exited: {exitCode}",
+                $"natural exit classifies game code {exitCode}");
+            Check(!messages.Any(m => m.Level == "warning" && m.Text?.StartsWith("Stop:") == true), "no stop command to an exited game");
+            Check(Directory.GetDirectories(gameAddons).SequenceEqual([existingAddon]), "natural exit removes staged GMod addons");
+        }
     }
     Console.WriteLine($"PASS {passed} checks; artifacts: {output}");
     File.WriteAllText(Path.Combine(output, "result.txt"), $"PASS {passed} checks; realGame={real}; {DateTimeOffset.Now:O}");
@@ -129,6 +273,26 @@ try
 catch (Exception error) { Console.Error.WriteLine(error); Console.Error.WriteLine("Evidence: " + output); return 1; }
 
 static bool IsAlive(int id) { try { using var p = Process.GetProcessById(id); return !p.HasExited; } catch (ArgumentException) { return false; } }
+static void WriteGma(string archive, string entry, string content)
+{
+    using var writer = new BinaryWriter(File.Create(archive));
+    writer.Write("GMAD"u8);
+    writer.Write((byte)3);
+    writer.Write(0UL); // Steam ID
+    writer.Write(0UL); // Timestamp
+    writer.Write((byte)0); // Required content terminator
+    writer.Write("CGH fixture\0{}\0CGH\0"u8);
+    writer.Write(1); // Addon version
+    writer.Write(1U); // File index
+    writer.Write(Encoding.UTF8.GetBytes(entry));
+    writer.Write((byte)0);
+    byte[] data = Encoding.UTF8.GetBytes(content);
+    writer.Write((long)data.Length);
+    writer.Write(0U); // File CRC
+    writer.Write(0U); // Index terminator
+    writer.Write(data);
+    writer.Write(0U); // Archive CRC
+}
 static async Task Until(Func<bool> condition, string name, int seconds, ConcurrentQueue<WireMessage>? messages = null)
 {
     var watch = Stopwatch.StartNew();

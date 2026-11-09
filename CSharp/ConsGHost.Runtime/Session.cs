@@ -8,6 +8,7 @@ namespace ConsGHost.Runtime;
 
 internal sealed class Session(string root, HostSettings settings, Func<WireMessage, Task> output) : IAsyncDisposable
 {
+    private static readonly TimeSpan GameExitGrace = TimeSpan.FromSeconds(2);
     private readonly string _pipeName = "cgh-session-" + Guid.NewGuid().ToString("N");
     private readonly string _token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
     private readonly ConcurrentDictionary<string, RuntimePeer> _peers = new();
@@ -19,6 +20,7 @@ internal sealed class Session(string root, HostSettings settings, Func<WireMessa
     private readonly TaskCompletionSource _stopRequested = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _stopFinished = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private ProcessJob? _job;
+    private Task<AddonStage?>? _addonStage;
     private List<ModSpec> _mods = [];
     private int _stopping;
     public string Directory { get; } = Path.Combine(root, "Sessions", DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..8]);
@@ -45,7 +47,24 @@ internal sealed class Session(string root, HostSettings settings, Func<WireMessa
             _mods = SessionPreparation.Prepare(root, settings);
             _job = new(); System.IO.Directory.CreateDirectory(Directory);
             await Log("Session: " + Directory);
+            await Log("CGH version: " + CghVersion.Current);
             await Log("Resolved load order: " + string.Join(" -> ", _mods.Select(m => m.Metadata.Id)));
+            var addons = _mods.SelectMany(mod => mod.Addons.Where(addon => !addon.Ignored)
+                .Select(addon => (Id: mod.Metadata.Id, Addon: addon))).ToArray();
+            if (addons.Length > 0 && SessionPreparation.AddonsDisabled(settings))
+            {
+                await Log("GMod addon loading skipped because -noaddons is set.");
+                addons = [];
+            }
+            else if (addons.Length > 0)
+                await Log($"Preparing {addons.Length} GMod addon(s).");
+            lock (_childGate)
+            {
+                if (_stopping != 0) throw new OperationCanceledException("Session startup cancelled.");
+                _addonStage = AddonStage.PrepareAsync(settings.GameDirectory, addons.Select(item => item.Addon).ToArray(), _lifetime.Token);
+            }
+            await _addonStage;
+            foreach (var addon in addons) await Log($"Staged GMod addon: {addon.Id}/{addon.Addon.Name}");
             _ = AcceptLoopAsync();
             _peers["game"] = new("game", _mods.Where(m => !m.Metadata.LoadAsSubprocess).Select(m => m.Metadata.Id).ToHashSet(StringComparer.Ordinal));
             foreach (var mod in _mods.Where(m => m.Metadata.LoadAsSubprocess))
@@ -143,8 +162,9 @@ internal sealed class Session(string root, HostSettings settings, Func<WireMessa
         {
             using var handshake = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token); handshake.CancelAfter(Timeout);
             var hello = await wire.ReceiveAsync(handshake.Token);
-            if (hello?.Kind != "hello" || hello.Token != _token || hello.Endpoint == null || !_peers.TryGetValue(hello.Endpoint, out peer) || peer.Wire != null)
+            if (hello?.Kind != "hello" || hello.Token != _token || hello.Endpoint == null || !_peers.TryGetValue(hello.Endpoint, out var candidate) || candidate.Wire != null)
                 throw new InvalidDataException("Rejected runtime handshake.");
+            peer = candidate;
             peer.Wire = wire; peer.ProcessId = hello.ProcessId;
             await Log($"Authenticated {peer.Endpoint}, PID {peer.ProcessId}");
             while (await wire.ReceiveAsync(_lifetime.Token) is { } message)
@@ -163,7 +183,7 @@ internal sealed class Session(string root, HostSettings settings, Func<WireMessa
                         if (message.Mod == null || !peer.Mods.Contains(message.Mod) || string.IsNullOrWhiteSpace(message.Topic) || message.Topic.Length > 128 || message.Payload?.Length > 256 * 1024)
                             throw new InvalidDataException("Invalid routed message.");
                         var delivery = message with { Kind = "deliver", Token = null, Endpoint = peer.Endpoint };
-                        foreach (var target in _peers.Values.Where(p => p.Wire != null && p.Loaded.Task.IsCompletedSuccessfully))
+                        foreach (var target in _peers.Values.Where(p => p.IsConnected && p.Loaded.Task.IsCompletedSuccessfully))
                             await target.Wire!.SendAsync(delivery, _lifetime.Token).WaitAsync(TimeSpan.FromSeconds(5));
                         break;
                 }
@@ -173,9 +193,21 @@ internal sealed class Session(string root, HostSettings settings, Func<WireMessa
         catch (Exception e) { if (peer != null) _failure.TrySetResult(e.Message); }
         finally
         {
-            if (peer != null && _stopping == 0) _failure.TrySetResult("Runtime disconnected: " + peer.Endpoint);
+            if (peer != null) peer.Disconnected = true;
             await wire.DisposeAsync();
+            if (peer != null) await ReportDisconnectAsync(peer);
         }
+    }
+    private async Task ReportDisconnectAsync(RuntimePeer peer)
+    {
+        if (_stopping != 0) return;
+        if (peer.Endpoint == "game")
+        {
+            // The pipe can close before the owning MRT reports the game's exit code.
+            await Task.WhenAny(_gameExit.Task, _stopRequested.Task, Task.Delay(GameExitGrace));
+            if (_gameExit.Task.IsCompleted) return;
+        }
+        if (_stopping == 0) _failure.TrySetResult("Runtime disconnected: " + peer.Endpoint);
     }
     private async Task MonitorAsync()
     {
@@ -185,13 +217,24 @@ internal sealed class Session(string root, HostSettings settings, Func<WireMessa
             {
                 var winner = await Task.WhenAny(_failure.Task, _gameExit.Task, Task.Delay(2000, _lifetime.Token));
                 if (winner == _failure.Task) { await Log(await _failure.Task, "error"); await output(new() { Kind = "fault", Text = await _failure.Task }); await StopAsync(); return; }
-                if (winner == _gameExit.Task) { await Log("Game exited: " + await _gameExit.Task); await StopAsync(); return; }
+                if (winner == _gameExit.Task)
+                {
+                    int code = await _gameExit.Task;
+                    string message = "Game exited: " + code;
+                    await Log(message, code == 0 ? "info" : "error");
+                    if (code != 0) await output(new() { Kind = "fault", Text = message });
+                    await StopAsync();
+                    return;
+                }
                 foreach (var peer in _peers.Values)
-                    if (DateTime.UtcNow - peer.LastHeartbeat > TimeSpan.FromSeconds(15)) _failure.TrySetResult("Runtime heartbeat timed out: " + peer.Endpoint);
+                    if (peer.IsConnected && DateTime.UtcNow - peer.LastHeartbeat > TimeSpan.FromSeconds(15)) _failure.TrySetResult("Runtime heartbeat timed out: " + peer.Endpoint);
             }
         }
         catch (OperationCanceledException) { }
     }
+    private bool CanStop(RuntimePeer peer) =>
+        peer.IsConnected && (peer.Endpoint != "game" || !_gameExit.Task.IsCompleted);
+
     public async Task StopAsync()
     {
         if (Interlocked.Exchange(ref _stopping, 1) != 0) { await _stopFinished.Task; return; }
@@ -202,10 +245,10 @@ internal sealed class Session(string root, HostSettings settings, Func<WireMessa
             foreach (var mod in _mods.AsEnumerable().Reverse())
             {
                 var endpoint = mod.Metadata.LoadAsSubprocess ? mod.Metadata.Id : "game";
-                if (_peers.TryGetValue(endpoint, out var peer) && peer.Wire != null)
+                if (_peers.TryGetValue(endpoint, out var peer) && CanStop(peer))
                     try { await peer.CommandAsync("stop-mod", mod.Metadata.Id, TimeSpan.FromSeconds(3)); } catch (Exception e) { await Log("Stop: " + e.Message, "warning"); }
             }
-            foreach (var peer in _peers.Values.Where(p => p.Wire != null))
+            foreach (var peer in _peers.Values.Where(CanStop))
                 try { await peer.CommandAsync("stop", null, TimeSpan.FromSeconds(3)); } catch { }
         }
         finally
@@ -214,7 +257,18 @@ internal sealed class Session(string root, HostSettings settings, Func<WireMessa
             lock (_childGate) { _job?.Dispose(); children = _children.ToArray(); }
             _lifetime.Cancel();
             foreach (var process in children) { try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)); } catch { } process.Dispose(); }
-            try { await Emit(new() { Kind = "state", Text = "idle" }); }
+            try
+            {
+                AddonStage? stage = null;
+                if (_addonStage != null)
+                {
+                    // PrepareAsync rolls back its own partial stage on failure.
+                    try { stage = await _addonStage; } catch { }
+                }
+                try { stage?.Dispose(); }
+                catch (Exception error) { await Log(error.Message, "warning"); }
+                await Emit(new() { Kind = "state", Text = "idle" });
+            }
             finally { _stopFinished.TrySetResult(); }
         }
     }

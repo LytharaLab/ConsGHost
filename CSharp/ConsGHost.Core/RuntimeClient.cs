@@ -14,6 +14,7 @@ public sealed class RuntimeClient(string root) : IAsyncDisposable
     public event Action<WireMessage>? Message;
     public async Task ConnectAsync()
     {
+        CghVersion.VerifyDistribution(root);
         var name = "cgh-host-" + Guid.NewGuid().ToString("N");
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
         var start = new ProcessStartInfo(Path.Combine(root, "ConsGHost.Runtime.exe")) { WorkingDirectory = root, UseShellExecute = false, CreateNoWindow = true };

@@ -43,9 +43,15 @@ public sealed record ModMetadata
     public List<string> LoadAfter { get; init; } = [];
     public List<string>? ManagedAssemblies { get; init; }
     public List<string>? NativeLibraries { get; init; }
+    public List<string> IgnoredAddons { get; init; } = [];
 }
 
-public sealed record ModSpec(ModMetadata Metadata, string Directory, List<string> Managed, List<string> Native);
+public sealed record ModAddon(string Name, string Path, bool IsArchive, bool Ignored);
+public sealed record ModSpec(ModMetadata Metadata, string Directory, List<string> Managed, List<string> Native)
+{
+    [JsonIgnore]
+    public List<ModAddon> Addons { get; init; } = [];
+}
 public sealed record ModIssue(string Directory, string Message);
 public sealed record ScanResult(List<ModSpec> Mods, List<ModIssue> Issues);
 public sealed record ExtraLibraryDirectory

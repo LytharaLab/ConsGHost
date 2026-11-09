@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "cgh.lapi",
+  "name": "CGH-LAPI",
+  "version": "0.1.1",
+  "description": "Session metadata and a bridge between CGH mods and the GLua client/server realms.",
+  "author": "LytharaLab",
+  "enabled": true,
+  "loadAsSubprocess": false,
+  "managedAssemblies": [],
+  "nativeLibraries": ["cgh_lapi_win64.dll"]
+}

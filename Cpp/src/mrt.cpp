@@ -2,7 +2,9 @@
 #include <tlhelp32.h>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <stdexcept>
 #include <utility>
@@ -129,6 +131,37 @@ static void prepare_entry_barrier(const PROCESS_INFORMATION& info) {
     }
     throw std::runtime_error("Game loader initialization timed out");
 }
+static std::wstring game_environment() {
+    std::unique_ptr<wchar_t, decltype(&FreeEnvironmentStringsW)> inherited(
+        GetEnvironmentStringsW(), FreeEnvironmentStringsW);
+    check(inherited != nullptr, "Read inherited environment");
+
+    // The startup debugger detaches before entry, but its debug heap would last until exit.
+    // Keep the override in the game's environment block, including any inherited drive entries.
+    constexpr wchar_t setting_name[] = L"_NO_DEBUG_HEAP";
+    constexpr wchar_t setting[] = L"_NO_DEBUG_HEAP=1";
+    std::wstring block;
+    const auto append = [&block](std::wstring_view entry) {
+        block.append(entry);
+        block.push_back(L'\0');
+    };
+    bool inserted = false;
+    for (const wchar_t* cursor = inherited.get(); *cursor;) {
+        std::wstring_view entry(cursor);
+        auto name = entry.substr(0, entry.find(L'=', 1));
+        int order = CompareStringOrdinal(name.data(), static_cast<int>(name.size()), setting_name, -1, TRUE);
+        if (!inserted && order != CSTR_LESS_THAN) {
+            append(setting);
+            inserted = true;
+        }
+        if (order != CSTR_EQUAL) append(entry);
+        cursor += entry.size() + 1;
+    }
+    if (!inserted) append(setting);
+    block.push_back(L'\0');
+    return block;
+}
+
 static int launch_game(const fs::path& game, const fs::path& config, const std::vector<std::wstring>& args) {
     auto runtime = root_dir() / L"cgh_runtime_win64.dll";
     HMODULE local = LoadLibraryExW(runtime.c_str(), nullptr, DONT_RESOLVE_DLL_REFERENCES);
@@ -143,9 +176,10 @@ static int launch_game(const fs::path& game, const fs::path& config, const std::
     check(SetInformationJobObject(job.value, JobObjectExtendedLimitInformation, &limits, sizeof(limits)) != 0, "Configure job");
     std::wstring command = quote(game.wstring());
     for (const auto& arg : args) command += L" " + quote(arg);
+    auto environment = game_environment();
     STARTUPINFOW startup{}; startup.cb = sizeof(startup); PROCESS_INFORMATION info{};
     check(CreateProcessW(game.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | DEBUG_ONLY_THIS_PROCESS,
-        nullptr, game.parent_path().c_str(), &startup, &info) != 0, "Create suspended game");
+        environment.data(), game.parent_path().c_str(), &startup, &info) != 0, "Create suspended game");
     handle process(info.hProcess); handle thread(info.hThread);
     try {
         check(AssignProcessToJobObject(job.value, process.value) != 0, "Assign owned game job");
@@ -157,8 +191,9 @@ static int launch_game(const fs::path& game, const fs::path& config, const std::
         if (result != 0) throw std::runtime_error("CGH bootstrap returned " + std::to_string(static_cast<int>(result)));
         check(ResumeThread(thread.value) != static_cast<DWORD>(-1), "Resume game");
         std::wcout << L"CGH_GAME_PID=" << info.dwProcessId << std::endl;
-        WaitForSingleObject(process.value, INFINITE);
-        DWORD code{}; GetExitCodeProcess(process.value, &code);
+        check(WaitForSingleObject(process.value, INFINITE) == WAIT_OBJECT_0, "Wait for game exit");
+        DWORD code{};
+        check(GetExitCodeProcess(process.value, &code) != 0, "Read game exit code");
         return static_cast<int>(code);
     } catch (...) { DebugActiveProcessStop(info.dwProcessId); TerminateProcess(process.value, 1); WaitForSingleObject(process.value, 5000); throw; }
 }
@@ -184,7 +219,11 @@ static int native_test(HMODULE runtime) {
 }
 int wmain(int argc, wchar_t** argv) {
     try {
-        if (argc < 2) throw std::runtime_error("Use --worker CONFIG, --game GAME --config CONFIG -- ARGS, or --native-test");
+        if (argc == 2 && std::wstring_view(argv[1]) == L"--version") {
+            std::cout << CGH_PRODUCT_VERSION << '\n';
+            return 0;
+        }
+        if (argc < 2) throw std::runtime_error("Use --version, --worker CONFIG, --game GAME --config CONFIG -- ARGS, or --native-test");
         if (std::wstring(argv[1]) == L"--game") {
             if (argc < 5 || std::wstring(argv[3]) != L"--config") throw std::runtime_error("Invalid game arguments");
             std::vector<std::wstring> args;

@@ -7,7 +7,18 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <PlatformTarget>x64</PlatformTarget>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>0.1.0</Version>
+    <CghProductVersion>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../VERSION').Trim())</CghProductVersion>
+    <Version>$(CghProductVersion)</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
+  <Target Name="ValidateCghProductVersion" BeforeTargets="GetAssemblyVersion">
+    <PropertyGroup>
+      <_CghVersionFormatValid>$([System.Text.RegularExpressions.Regex]::IsMatch('$(CghProductVersion)', '^(0|[1-9][0-9]{0,4})\.(0|[1-9][0-9]{0,4})\.(0|[1-9][0-9]{0,4})$'))</_CghVersionFormatValid>
+    </PropertyGroup>
+    <Error Condition="'$(_CghVersionFormatValid)' != 'True'"
+           Text="VERSION must contain a stable major.minor.patch version with no leading zeros." />
+    <Error Condition="$([System.Version]::Parse('$(CghProductVersion)').Major) &gt; 65534 Or $([System.Version]::Parse('$(CghProductVersion)').Minor) &gt; 65534 Or $([System.Version]::Parse('$(CghProductVersion)').Build) &gt; 65534"
+           Text="VERSION components must be at most 65534." />
+  </Target>
 </Project>
