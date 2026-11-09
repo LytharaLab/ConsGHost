@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using ConsGHost.SDK;
 
 namespace ConsGHost.Bootstrap;
@@ -14,6 +15,7 @@ internal sealed unsafe class NativeModule
         public uint Size, Version;
         public nint Context;
         public nint Log, Register, Call, Publish, FindExport, CreateHook, EnableHook, RemoveHook;
+        public nint ConfigRead, ConfigSet;
     }
     [StructLayout(LayoutKind.Sequential)]
     private struct ModInfo
@@ -43,7 +45,9 @@ internal sealed unsafe class NativeModule
             FindExport = (nint)(delegate* unmanaged[Cdecl]<nint, byte*, byte*, nint>)&FindExport,
             CreateHook = (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, nint*, int>)&CreateHook,
             EnableHook = (nint)(delegate* unmanaged[Cdecl]<nint, nint, int, int>)&EnableHook,
-            RemoveHook = (nint)(delegate* unmanaged[Cdecl]<nint, nint, int>)&RemoveHook
+            RemoveHook = (nint)(delegate* unmanaged[Cdecl]<nint, nint, int>)&RemoveHook,
+            ConfigRead = (nint)(delegate* unmanaged[Cdecl]<nint, byte*, int, int>)&ConfigRead,
+            ConfigSet = (nint)(delegate* unmanaged[Cdecl]<nint, byte*, byte*, int, int>)&ConfigSet
         };
         _api = Marshal.AllocHGlobal(sizeof(HostApi)); *(HostApi*)_api = api;
         var info = new ModInfo { Size = (uint)sizeof(ModInfo), Id = Utf8(context.Id), Directory = Utf8(context.ModDirectory),
@@ -116,4 +120,32 @@ internal sealed unsafe class NativeModule
     private static int EnableHook(nint self, nint target, int enabled) { try { return Self(self)._context.EnableHook(target, enabled); } catch { return -2; } }
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static int RemoveHook(nint self, nint target) { try { return Self(self)._context.RemoveHook(target); } catch { return -2; } }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static int ConfigRead(nint self, byte* output, int capacity)
+    {
+        try
+        {
+            if (capacity < 0 || (output == null && capacity != 0)) return -2;
+            var config = Self(self)._context.Config;
+            if (config == null) return -1;
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(config.Read());
+            if (bytes.Length <= capacity) bytes.CopyTo(new Span<byte>(output, capacity));
+            return bytes.Length;
+        }
+        catch { return -2; }
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static int ConfigSet(nint self, byte* key, byte* value, int length)
+    {
+        try
+        {
+            if (key == null || value == null || length <= 0) return -2;
+            var config = Self(self)._context.Config;
+            if (config == null) return -1;
+            var json = JsonSerializer.Deserialize<JsonElement>(new ReadOnlySpan<byte>(value, length));
+            config.Set(Text(key), json);
+            return 0;
+        }
+        catch { return -2; }
+    }
 }

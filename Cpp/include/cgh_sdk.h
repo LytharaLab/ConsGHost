@@ -38,6 +38,16 @@ struct cgh_host_api {
     int32_t (CGH_CALL* remove_hook)(void*, void* target);
 };
 
+// CGH 1.2+. Check base.size >= sizeof(cgh_host_api_config) before casting to this table.
+struct cgh_host_api_config {
+    cgh_host_api base;
+    // Returns the UTF-8 JSON byte count. Copies only when capacity suffices. Query with nullptr/0.
+    // No NUL terminator. -1: no config template, -2: invalid arguments or configuration error.
+    int32_t (CGH_CALL* config_read)(void*, uint8_t* output, int32_t capacity);
+    // Sets one top-level key from a UTF-8 JSON value. 0: saved, -1: no template, -2: error.
+    int32_t (CGH_CALL* config_set)(void*, const char* key, const uint8_t* json, int32_t size);
+};
+
 // A Native DLL with no cgh_module_load export is a dependency library, not an entry module.
 // Any number of DLLs in Native may export these entry points. Load return: 0 success.
 typedef int32_t (CGH_CALL* cgh_module_load_fn)(const cgh_host_api*, const cgh_mod_info*);

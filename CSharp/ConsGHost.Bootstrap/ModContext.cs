@@ -12,6 +12,7 @@ internal sealed class ModContext(RuntimeEngine engine, ModSpec spec) : IModConte
     public string DataDirectory { get; } = Directory.CreateDirectory(Path.Combine(engine.Plan.RootDirectory, "Data", spec.Metadata.Id)).FullName;
     public bool IsIsolated => engine.Plan.IsIsolated;
     public CancellationToken Stopping => _stopping.Token;
+    public IModConfig? Config { get; } = ModConfig.Open(spec.Directory);
     private readonly CancellationTokenSource _stopping = new();
     private readonly ConcurrentBag<IDisposable> _registrations = [];
     private readonly ConcurrentDictionary<nint, IDisposable> _hooks = [];

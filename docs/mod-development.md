@@ -53,6 +53,55 @@ Mods/MyMod/
 
 CGH 在启动前为所有已启用模组暂存插件，包括设为独立子进程的模组。标准未压缩 GMAD 包会先展开成目录，因此目录插件和 `.gma` 都由 GMod 从 `garrysmod/addons` 加载。暂存目录使用 CGH 生成的唯一名称，已有游戏插件保留原位。修改源插件后，重开会话即可更新副本。会话停止、退出或启动回滚后会清理副本，强制终止后由下次 CGH 会话回收残留。游戏参数 `-noaddons` 会跳过 CGH 插件，使用这项功能时请保留默认 GMod 游戏目录。
 
+## 模组配置
+
+在模组根目录放置 `config.default.json`。文件是一个 JSON 对象，键和默认值同时定义简单配置界面的字段与类型。例如：
+
+```json
+{
+  "enabled": true,
+  "displayName": "My Mod",
+  "interval": 0.5,
+  "diagnostics": { "verbose": false },
+  "maps": ["gm_construct"]
+}
+```
+
+CGH 首次扫描时复制模板生成同目录的 `config.json`。重新扫描保留现有配置。新增的默认键在读取时递归补齐，未知键保留，数组整体作为一个值。模板为 `null` 的键可接受任意 JSON 类型。没有模板的模组仍可正常加载。
+
+在「模组管理」中选择模组后点击「配置…」。简单配置按字段提供复选框和输入框，数组和自由 JSON 值可以在单个字段中编辑。高级配置直接编辑完整 JSON，可用来修复手动编辑造成的格式错误。两种模式共享未保存的编辑，保存前校验 JSON 和模板类型。如果磁盘上的配置在编辑期间被其他进程修改，重新打开后再编辑。
+
+### C# Config API
+
+```csharp
+if (context.Config is { } config)
+{
+    bool verbose = config.Read().GetProperty("diagnostics").GetProperty("verbose").GetBoolean();
+    string? label = config.Get<string>("displayName");
+    config.Set("interval", 1.0);
+}
+```
+
+`Read()` 返回当前有效配置快照，`Get<T>(key)` 读取顶层值，`Set(key, value)` 原子写入一个顶层值并保留其他键。API 每次读取磁盘，模组可自行选择重新读取的时机，建议在加载或明确的刷新操作中使用。
+
+### 原生 Config API
+
+CGH 1.2.0 起，`cgh_host_api_config` 扩展表保留原 ABI v1 前缀。读取扩展前检查 `api->size >= sizeof(cgh_host_api_config)`。
+
+```cpp
+if (api->size >= sizeof(cgh_host_api_config)) {
+    auto* config = reinterpret_cast<const cgh_host_api_config*>(api);
+    int32_t length = config->config_read(api->context, nullptr, 0);
+    if (length > 0) {
+        // 分配 length 字节后再次调用 config_read。若返回值更大，请按新长度重试。
+        const uint8_t interval[] = {'1', '.', '0'};
+        config->config_set(api->context, "interval", interval, sizeof(interval));
+    }
+}
+```
+
+`config_read` 返回 UTF-8 JSON 所需字节数，缓冲区足够时复制完整快照。数据不含 NUL 结尾。`config_set` 接收单个 JSON 值，成功返回 `0`。两者在模组未提供模板时返回 `-1`，发生参数或配置错误时返回 `-2`。
+
 ## C#
 
 目标 `net10.0-windows`，x64；引用发行目录 `SDK/ConsGHost.SDK.dll`，实现：

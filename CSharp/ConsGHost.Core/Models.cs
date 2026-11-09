@@ -51,6 +51,8 @@ public sealed record ModSpec(ModMetadata Metadata, string Directory, List<string
 {
     [JsonIgnore]
     public List<ModAddon> Addons { get; init; } = [];
+    [JsonIgnore]
+    public bool HasConfig { get; init; }
 }
 public sealed record ModIssue(string Directory, string Message);
 public sealed record ScanResult(List<ModSpec> Mods, List<ModIssue> Issues);

@@ -43,6 +43,7 @@ public sealed partial class MainForm
         BackColor = Surface, ForeColor = HostTheme.Text, Font = Body, Margin = Padding.Empty
     };
     private readonly Button _modFolder = Action("打开模组目录");
+    private readonly Button _modConfig = Action("配置…");
     private readonly Button _editExtra = Action("修改目录");
     private readonly Button _deleteExtra = Action("移除目录");
     private readonly TextBox _game = InputBox("Garry’s Mod 目录");
@@ -190,6 +191,7 @@ public sealed partial class MainForm
         _mods.CellValueChanged += OnModChanged;
         _search.TextChanged += (_, _) => PopulateMods();
         _modFolder.Click += (_, _) => { if (_mods.CurrentRow?.Tag is ModSpec mod) OpenFolder(mod.Directory); };
+        _modConfig.Click += (_, _) => Guard(OpenModConfig);
 
         var list = Card();
         var listHeader = Columns(new(SizeType.Percent, 100), new(SizeType.Absolute, 42), new(SizeType.Absolute, 176));
@@ -204,9 +206,7 @@ public sealed partial class MainForm
         var details = Card(new(13, 6, 13, 10));
         Row(details, Caption("模组详情", Strong, Accent), SizeType.Absolute, 32);
         Row(details, _modDetails, SizeType.Percent, 100);
-        _modFolder.Anchor = AnchorStyles.Left;
-        _modFolder.Margin = Padding.Empty;
-        Row(details, _modFolder, SizeType.Absolute, 34);
+        Row(details, Actions(_modConfig, _modFolder), SizeType.Absolute, 34);
         var columns = Columns(new(SizeType.Percent, 65), new(SizeType.Percent, 35));
         list.Margin = new(0, 0, 12, 0);
         columns.Controls.Add(list, 0, 0);

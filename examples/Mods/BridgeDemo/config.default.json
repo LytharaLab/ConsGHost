@@ -1,0 +1,6 @@
+{
+  "benchmarkIterations": 100000,
+  "diagnostics": {
+    "logFirstFrame": true
+  }
+}

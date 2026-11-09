@@ -118,6 +118,7 @@ public sealed partial class MainForm : Form
     {
         var mod = _mods.CurrentRow?.Tag as ModSpec;
         _modFolder.Enabled = mod != null;
+        _modConfig.Enabled = mod?.HasConfig == true;
         _modDetails.Clear();
 
         void Line(string text, Font? font = null, Color? color = null)
@@ -175,6 +176,15 @@ public sealed partial class MainForm : Form
 
         _modDetails.Select(0, 0);
         _modDetails.ScrollToCaret();
+    }
+
+    private void OpenModConfig()
+    {
+        if (_mods.CurrentRow?.Tag is not ModSpec mod) return;
+        var config = ModConfig.Open(mod.Directory) ?? throw new FileNotFoundException(ModConfig.DefaultFileName);
+        using var dialog = new ModConfigDialog(mod.Metadata.Name, config);
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+            Append($"已保存模组配置 · {mod.Metadata.Id}", "info");
     }
 
     private void OnModChanged(object? sender, DataGridViewCellEventArgs e)
@@ -453,6 +463,17 @@ public sealed partial class MainForm : Form
             _search.Clear();
         }
 
+        var configFixture = Path.Combine(output, "config-fixture");
+        Directory.CreateDirectory(configFixture);
+        File.WriteAllText(Path.Combine(configFixture, ModConfig.DefaultFileName), """{"enabled":true,"nested":{"count":1}}""");
+        File.WriteAllText(Path.Combine(configFixture, "config.json"), """{"enabled":true,"extra":"keep"}""");
+        using (var dialog = new ModConfigDialog("CGH 配置自检", ModConfig.Open(configFixture)!))
+        {
+            dialog.Show(this);
+            await dialog.CheckAndRenderAsync(output);
+            dialog.Close();
+        }
+
         _pages[1].Navigation.PerformClick();
         if (_extras.Rows.Count == 0 && (!_extraEmpty.Visible || _editExtra.Enabled || _deleteExtra.Enabled))
             throw new InvalidOperationException("Extra DLL empty state is inconsistent.");
@@ -478,7 +499,7 @@ public sealed partial class MainForm : Form
         await RenderAsync("compact-settings.png");
 
         File.WriteAllText(Path.Combine(output, "result.txt"),
-            "PASS: runtime connected, 3 pages rendered, navigation, search, persistence, DLL page and log collapse checked.");
+            "PASS: runtime connected, 3 pages rendered, navigation, search, persistence, both config editors, DLL page and log collapse checked.");
 
         void CheckToggle(DataGridViewCell cell, Func<HostSettings, bool> readValue)
         {

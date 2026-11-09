@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using ConsGHost.Core;
+using ConsGHost.SDK;
 
 var repo = Path.GetFullPath(args.FirstOrDefault(a => !a.StartsWith("--")) ?? Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 bool real = args.Contains("--real-game");
@@ -30,6 +32,34 @@ try
         Id = "bad", Name = "bad", Version = "1.0.0", IgnoredAddons = ["../outside"]
     });
     Check(ModCatalog.Scan(Path.GetDirectoryName(invalid)!).Issues.Single().Message.Contains("ignoredAddons"), "addon ignore entries reject paths");
+    var configurable = Path.Combine(output, "config-catalog", "Configured");
+    Directory.CreateDirectory(configurable);
+    Json.Write(Path.Combine(configurable, "cghm_metadata.json"), new ModMetadata { Id = "configured", Name = "Configured", Version = "1.0.0" });
+    var configMods = Path.GetDirectoryName(configurable)!;
+    var template = Path.Combine(configurable, ModConfig.DefaultFileName);
+    File.WriteAllText(template, """{"flag":true,"nested":{"count":2},"optional":null}""", Encoding.UTF8);
+    Check(ModCatalog.Scan(configMods).Mods.Single().HasConfig, "mod scan discovers a configuration template");
+    var config = ModConfig.Open(configurable)!;
+    Check(File.ReadAllBytes(config.FilePath).SequenceEqual(File.ReadAllBytes(template)), "first scan copies default configuration byte for byte");
+    const string edited = """{"flag":false,"nested":{"custom":"中文"},"unknown":[1,2]}""";
+    config.SaveRaw(edited, config.ReadRaw());
+    Check(ModCatalog.Scan(configMods).Mods.Single().HasConfig && config.ReadRaw() == edited, "rescan preserves edited config file");
+    IModConfig api = config;
+    var snapshot = api.Read();
+    Check(!api.Get<bool>("flag") && snapshot.GetProperty("nested").GetProperty("count").GetInt32() == 2 &&
+        snapshot.GetProperty("unknown").GetArrayLength() == 2, "SDK reads merged defaults and preserves unknown values");
+    var original = config.ReadRaw();
+    await Task.WhenAll(Task.Run(() => api.Set("optional", "set")), Task.Run(() => api.Set("external", 42)));
+    Check(api.Get<string>("optional") == "set" && api.Get<int>("external") == 42, "concurrent config key updates both persist");
+    try { config.SaveRaw(edited, original); throw new InvalidOperationException("Stale configuration overwritten"); }
+    catch (IOException) { Check(api.Get<int>("external") == 42, "reject stale editor saves"); }
+    var current = config.ReadRaw();
+    Reject(() => config.SaveRaw("""{"flag":"yes"}""", current), "reject wrong config value types");
+    Reject(() => config.SaveRaw("""{"flag":true,"flag":false}""", current), "reject duplicate config keys");
+    File.WriteAllText(config.FilePath, "{ invalid");
+    Check(ModCatalog.Scan(configMods).Mods.Single().HasConfig, "malformed user config remains accessible for repair");
+    config.SaveRaw(edited, config.ReadRaw());
+    Check(config.ReadRaw() == edited && ModConfig.Open(output) == null, "repair user config and allow mods without templates");
     await using (var memory = new MemoryStream())
     {
         await using var writer = new Wire(memory);
@@ -65,6 +95,16 @@ try
     var stageRoot = Path.Combine(game, "garrysmod", ".cgh-addons");
     var addonSource = Path.Combine(distribution, "Mods", "AddonFixture", "Addons");
     var existingAddon = Path.Combine(gameAddons, "cgh_" + Guid.NewGuid().ToString("N"));
+    var bridgeConfig = ModConfig.Open(Path.Combine(distribution, "Mods", "BridgeDemo"))!;
+    bridgeConfig.Set("benchmarkIterations", 100001);
+    var nativeConfigMod = Path.Combine(distribution, "Mods", "ConfigFixture");
+    Directory.CreateDirectory(Path.Combine(nativeConfigMod, "Native"));
+    File.Copy(Path.Combine(extra, "cgh_test_extra.dll"), Path.Combine(nativeConfigMod, "Native", "cgh_config_fixture.dll"));
+    Json.Write(Path.Combine(nativeConfigMod, "cghm_metadata.json"), new ModMetadata
+    {
+        Id = "fixture.config", Name = "Native config fixture", Version = "1.0.0"
+    });
+    File.WriteAllText(Path.Combine(nativeConfigMod, ModConfig.DefaultFileName), """{"nativeProbe":41}""");
     if (!real)
     {
         // Exercise an unrelated installed addon and owned leftovers from an interrupted Runtime.
@@ -156,7 +196,12 @@ try
         Check((await reservationFault.Task.WaitAsync(TimeSpan.FromSeconds(15))).Contains("reserve GMod addon staging") &&
             staged.All(Directory.Exists), "a concurrent CGH session cannot remove the active addon's copies");
     }
-    var metrics = Path.Combine(distribution, "Data/cgh.example/bridge-metrics.json"); Check(File.Exists(metrics), "100000-call bridge stress completed");
+    var metrics = Path.Combine(distribution, "Data/cgh.example/bridge-metrics.json");
+    using (var benchmark = JsonDocument.Parse(File.ReadAllText(metrics)))
+        Check(benchmark.RootElement.GetProperty("iterations").GetInt32() == 100001, "managed mod reads its edited benchmark config through the SDK");
+    Check(ModConfig.Open(nativeConfigMod)!.Read().GetProperty("nativeProbe").GetInt32() == 42, "native mod reads and updates config through the ABI extension");
+    settings.DisabledMods.Add("fixture.config");
+    Json.Write(Path.Combine(distribution, "cgh_settings.json"), settings);
     Console.WriteLine("  " + File.ReadAllText(metrics));
     await client.SendAsync("stop");
     await Until(() => messages.Count(m => m.Kind == "state" && m.Text == "idle") >= 2, "session shutdown", 40);

@@ -45,6 +45,7 @@ CGH 产品版本、模组自己的版本号和原生 SDK 的 ABI 版本分别维
 ```text
 Mods/MyMod/
   cghm_metadata.json           # 必须
+  config.default.json         # 可选，定义模组配置，首次扫描时生成 config.json
   Managed/                    # 任意数量的 .NET 10 DLL
   Native/                     # 任意数量的 Windows x64 原生 DLL
   Resources/                  # 任意资源，由模组自行使用

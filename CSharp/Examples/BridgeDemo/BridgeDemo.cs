@@ -9,6 +9,7 @@ public sealed class BridgeDemo : ICghMod
 {
     private IModContext _context = null!;
     private long _ticks;
+    private bool _logFirstFrame = true;
     public void Load(IModContext context)
     {
         _context = context;
@@ -31,7 +32,11 @@ public sealed class BridgeDemo : ICghMod
         int size = _context.Call(_context.Id, "native.echo", input, output);
         if (size != input.Length || !input.SequenceEqual(output[..size])) throw new InvalidOperationException("Native echo bridge failed.");
         _context.Log("Managed -> native direct service call passed");
-        const int iterations = 100000;
+        var config = _context.Config?.Read();
+        int iterations = config?.GetProperty("benchmarkIterations").GetInt32() ?? 100000;
+        _logFirstFrame = config?.GetProperty("diagnostics").GetProperty("logFirstFrame").GetBoolean() ?? true;
+        if (iterations is < 1 or > 1_000_000)
+            throw new InvalidDataException("benchmarkIterations must be between 1 and 1000000.");
         var watch = Stopwatch.StartNew();
         for (int i = 0; i < iterations; ++i)
             if (_context.Call(_context.Id, "native.echo", input, output) != input.Length) throw new InvalidOperationException("Bridge stress failed.");
@@ -44,7 +49,11 @@ public sealed class BridgeDemo : ICghMod
     }
     public void Tick(double deltaSeconds)
     {
-        if (++_ticks == 1) { _context.Log(_context.IsIsolated ? "Managed Tick received worker timer" : "Managed Tick received actual engine frame"); File.WriteAllText(Path.Combine(_context.DataDirectory, "first-frame.txt"), $"{Environment.ProcessId} {DateTimeOffset.Now:O}"); }
+        if (++_ticks == 1)
+        {
+            if (_logFirstFrame) _context.Log(_context.IsIsolated ? "Managed Tick received worker timer" : "Managed Tick received actual engine frame");
+            File.WriteAllText(Path.Combine(_context.DataDirectory, "first-frame.txt"), $"{Environment.ProcessId} {DateTimeOffset.Now:O}");
+        }
         if (_ticks == 300) _context.Log(_context.IsIsolated ? "Worker stability check passed: 300 ticks" : "Engine stability check passed: 300 frames");
     }
     public void Stop() => _context.Log($"Managed module stopped after {_ticks} frame(s)");

@@ -38,7 +38,8 @@ public static partial class ModCatalog
                 var addons = ScanAddons(directory, metadata.IgnoredAddons);
                 foreach (var file in managed) _ = AssemblyName.GetAssemblyName(file);
                 foreach (var file in native) ValidateX64(file, requireNativeDll: true);
-                mods.Add(new(metadata, Path.GetFullPath(directory), managed, native) { Addons = addons });
+                bool hasConfig = ModConfig.Open(directory) != null;
+                mods.Add(new(metadata, Path.GetFullPath(directory), managed, native) { Addons = addons, HasConfig = hasConfig });
             }
             catch (Exception ex) { issues.Add(new(directory, ex.Message)); }
         }

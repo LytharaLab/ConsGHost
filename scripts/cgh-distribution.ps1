@@ -21,6 +21,10 @@ function Copy-CghDistribution {
             if (!(Test-Path -LiteralPath "$modRoot/cghm_metadata.json")) {
                 Copy-Item -LiteralPath "examples/Mods/$name/cghm_metadata.json" -Destination $modRoot
             }
+            $defaultConfig = "examples/Mods/$name/config.default.json"
+            if (Test-Path -LiteralPath $defaultConfig) {
+                Copy-Item -LiteralPath $defaultConfig -Destination $modRoot -Force
+            }
             Copy-Item -Path "CSharp/Examples/$name/bin/$Configuration/net10.0-windows/$name.*" -Destination "$modRoot/Managed" -Force
         }
         Copy-Item -LiteralPath "Cpp/build/$Configuration/cgh_example_native.dll" -Destination "$Destination/Mods/BridgeDemo/Native" -Force
