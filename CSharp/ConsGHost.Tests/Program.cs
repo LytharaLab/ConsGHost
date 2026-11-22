@@ -5,8 +5,12 @@ using System.Text.Json;
 using ConsGHost.Core;
 using ConsGHost.SDK;
 
-var repo = Path.GetFullPath(args.FirstOrDefault(a => !a.StartsWith("--")) ?? Path.Combine(AppContext.BaseDirectory, "../../../../../"));
-bool real = args.Contains("--real-game");
+int realGameArgument = Array.IndexOf(args, "--real-game");
+bool real = realGameArgument >= 0;
+var repo = Path.GetFullPath(args.TakeWhile(a => !a.StartsWith("--")).FirstOrDefault() ?? Path.Combine(AppContext.BaseDirectory, "../../../../../"));
+string? realGameDirectory = real ? args.ElementAtOrDefault(realGameArgument + 1) : null;
+if (real && (string.IsNullOrWhiteSpace(realGameDirectory) || !File.Exists(Path.Combine(realGameDirectory, "gmod_win64.exe"))))
+    throw new ArgumentException("--real-game requires the directory containing gmod_win64.exe.");
 var output = Path.Combine(repo, "artifacts", "tests", Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(output);
 int passed = 0;
@@ -90,7 +94,12 @@ try
     File.Copy(Path.Combine(repo, "Cpp/build/Release/server.dll"), Path.Combine(game, "server.dll"));
     File.Copy(Path.Combine(repo, "Cpp/build/Release/cgh_test_extra.dll"), Path.Combine(extra, "cgh_test_extra.dll"));
     var settings = new HostSettings { GameDirectory = game, GameArguments = ["45"], ExtraLibraries = [new() { Path = extra }] };
-    if (real) { settings.GameDirectory = @"L:\SteamLibrary\steamapps\common\GarrysMod"; settings.GameArguments = ["-console", "-novid", "-insecure", "-noaddons", "-noworkshop", "-windowed", "-w", "1024", "-h", "768", "+map", "gm_construct"]; settings.StartupTimeoutSeconds = 120; }
+    if (realGameDirectory != null)
+    {
+        settings.GameDirectory = Path.GetFullPath(realGameDirectory);
+        settings.GameArguments = ["-console", "-novid", "-insecure", "-noaddons", "-noworkshop", "-windowed", "-w", "1024", "-h", "768", "+map", "gm_construct"];
+        settings.StartupTimeoutSeconds = 120;
+    }
     var gameAddons = Path.Combine(game, "garrysmod", "addons");
     var stageRoot = Path.Combine(game, "garrysmod", ".cgh-addons");
     var addonSource = Path.Combine(distribution, "Mods", "AddonFixture", "Addons");

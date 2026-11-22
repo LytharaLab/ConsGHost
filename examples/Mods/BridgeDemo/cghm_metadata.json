@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "cgh.example",
-  "name": "CGH 双语言桥示例",
+  "name": "CGH Managed and Native Bridge Demo",
   "version": "1.0.0",
-  "description": "进程内 C# / C++ 双向 echo、桥接压力测试和真实引擎帧回调。",
+  "description": "Demonstrates two-way C# and C++ calls, an echo benchmark, and engine frame callbacks.",
   "author": "ConsGHost",
   "enabled": true,
   "loadAsSubprocess": false,

@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="AddFolder" xml:space="preserve"><value>添加目录</value></data>
+  <data name="Author" xml:space="preserve"><value>作者：{0}</value></data>
+  <data name="Browse" xml:space="preserve"><value>浏览…</value></data>
+  <data name="BrowseFor" xml:space="preserve"><value>浏览：{0}</value></data>
+  <data name="Cancel" xml:space="preserve"><value>取消</value></data>
+  <data name="CheckLaunch" xml:space="preserve"><value>检查启动配置</value></data>
+  <data name="ChooseExtraFolder" xml:space="preserve"><value>选择包含 x64 原生 DLL 的目录</value></data>
+  <data name="Clear" xml:space="preserve"><value>清空</value></data>
+  <data name="Collapse" xml:space="preserve"><value>收起</value></data>
+  <data name="ConfigEditFailed" xml:space="preserve"><value>配置错误：{0}</value></data>
+  <data name="ConfigEmptyTemplate" xml:space="preserve"><value>模板没有定义字段。请使用 JSON 编辑器修改。</value></data>
+  <data name="ConfigSaveHint" xml:space="preserve"><value>修改会保存到此模组的 config.json。</value></data>
+  <data name="ConfigTitle" xml:space="preserve"><value>模组配置 · {0}</value></data>
+  <data name="Configure" xml:space="preserve"><value>配置…</value></data>
+  <data name="Connecting" xml:space="preserve"><value>连接中</value></data>
+  <data name="Copy" xml:space="preserve"><value>复制</value></data>
+  <data name="Dependencies" xml:space="preserve"><value>依赖</value></data>
+  <data name="Disabled" xml:space="preserve"><value>已停用</value></data>
+  <data name="Disconnected" xml:space="preserve"><value>未连接</value></data>
+  <data name="DllFolder" xml:space="preserve"><value>原生 DLL 目录</value></data>
+  <data name="DotnetFolder" xml:space="preserve"><value>.NET 10 x64 根目录</value></data>
+  <data name="EditFolder" xml:space="preserve"><value>修改目录</value></data>
+  <data name="Enabled" xml:space="preserve"><value>已启用</value></data>
+  <data name="EnableGameFrame" xml:space="preserve"><value>启用 Source 引擎 GameFrame Hook</value></data>
+  <data name="Environment" xml:space="preserve"><value>运行环境</value></data>
+  <data name="Expand" xml:space="preserve"><value>展开</value></data>
+  <data name="ExtraEmpty" xml:space="preserve"><value>暂无额外 DLL 目录。点击「添加目录」开始。</value></data>
+  <data name="ExtrasDescription" xml:space="preserve"><value>管理在模组之前载入 Garry’s Mod 的 x64 DLL 目录。</value></data>
+  <data name="ExtrasPage" xml:space="preserve"><value>额外 DLL</value></data>
+  <data name="ExtraSummary" xml:space="preserve"><value>目录 {0} 个 · 已启用 {1} 个</value></data>
+  <data name="FormEditor" xml:space="preserve"><value>简单配置</value></data>
+  <data name="GameArguments" xml:space="preserve"><value>游戏参数</value></data>
+  <data name="GameArgumentsHint" xml:space="preserve"><value>每行一个游戏参数，由 CGH 处理引号。</value></data>
+  <data name="GameFolder" xml:space="preserve"><value>Garry’s Mod 目录</value></data>
+  <data name="GameFolderHint" xml:space="preserve"><value>Garry’s Mod 目录 · 包含 gmod_win64.exe</value></data>
+  <data name="GameProcess" xml:space="preserve"><value>GMod 进程</value></data>
+  <data name="GameStartup" xml:space="preserve"><value>游戏启动</value></data>
+  <data name="GmodAddons" xml:space="preserve"><value>GMod 插件</value></data>
+  <data name="HostDescription" xml:space="preserve"><value>C# · C++ 模组宿主</value></data>
+  <data name="HostLog" xml:space="preserve"><value>宿主日志</value></data>
+  <data name="IgnoredAddon" xml:space="preserve"><value>{0}（已忽略）</value></data>
+  <data name="InsecureDefault" xml:space="preserve"><value>默认的 -insecure 参数用于本地原生模组开发。</value></data>
+  <data name="JsonEditor" xml:space="preserve"><value>JSON 编辑器</value></data>
+  <data name="Language" xml:space="preserve"><value>界面语言</value></data>
+  <data name="LaunchGame" xml:space="preserve"><value>启动游戏</value></data>
+  <data name="LoadAfter" xml:space="preserve"><value>在以下模组之后加载</value></data>
+  <data name="LogSummary" xml:space="preserve"><value>事件 {0} 条 · 错误 {1} 条</value></data>
+  <data name="MetadataDisabled" xml:space="preserve"><value>元数据已禁用</value></data>
+  <data name="MetadataDisabledHint" xml:space="preserve"><value>此模组已在元数据中禁用。</value></data>
+  <data name="ModDetails" xml:space="preserve"><value>模组详情</value></data>
+  <data name="ModList" xml:space="preserve"><value>模组列表 · {0}</value></data>
+  <data name="ModsDescription" xml:space="preserve"><value>选择下次会话要加载的模组，并查看它们的依赖。</value></data>
+  <data name="ModsEmpty" xml:space="preserve"><value>未发现模组。将模组放入 Mods 后重新扫描。</value></data>
+  <data name="ModsFound" xml:space="preserve"><value>已发现模组</value></data>
+  <data name="ModsPage" xml:space="preserve"><value>模组管理</value></data>
+  <data name="ModuleCounts" xml:space="preserve"><value>托管模块 {0} 个 · 原生模块 {1} 个</value></data>
+  <data name="Name" xml:space="preserve"><value>名称</value></data>
+  <data name="OpenModFolder" xml:space="preserve"><value>打开模组目录</value></data>
+  <data name="OpenMods" xml:space="preserve"><value>打开 Mods</value></data>
+  <data name="OpenSessionLogs" xml:space="preserve"><value>打开会话日志</value></data>
+  <data name="OptionalDependency" xml:space="preserve"><value>{0}（可选）</value></data>
+  <data name="Process" xml:space="preserve"><value>运行位置</value></data>
+  <data name="Ready" xml:space="preserve"><value>就绪</value></data>
+  <data name="Recursive" xml:space="preserve"><value>包含子目录</value></data>
+  <data name="RemoveFolder" xml:space="preserve"><value>移除目录</value></data>
+  <data name="Rescan" xml:space="preserve"><value>重新扫描</value></data>
+  <data name="Running" xml:space="preserve"><value>运行中 · PID {0}</value></data>
+  <data name="Save" xml:space="preserve"><value>保存</value></data>
+  <data name="Saved" xml:space="preserve"><value>已保存</value></data>
+  <data name="SaveSettings" xml:space="preserve"><value>保存设置</value></data>
+  <data name="ScanIssues" xml:space="preserve"><value>扫描问题</value></data>
+  <data name="Search" xml:space="preserve"><value>搜索</value></data>
+  <data name="SearchEmpty" xml:space="preserve"><value>没有匹配的模组。试试其他名称或 ID。</value></data>
+  <data name="SearchMods" xml:space="preserve"><value>搜索模组</value></data>
+  <data name="SearchPlaceholder" xml:space="preserve"><value>名称或 ID</value></data>
+  <data name="SelectMod" xml:space="preserve"><value>选择一个模组，查看它的版本、模块和依赖。</value></data>
+  <data name="SettingsDescription" xml:space="preserve"><value>设置界面语言、目录和游戏启动选项。</value></data>
+  <data name="SettingsPage" xml:space="preserve"><value>设置</value></data>
+  <data name="Starting" xml:space="preserve"><value>启动中</value></data>
+  <data name="Stopping" xml:space="preserve"><value>停止中</value></data>
+  <data name="StopSession" xml:space="preserve"><value>停止会话</value></data>
+  <data name="Subprocess" xml:space="preserve"><value>独立子进程</value></data>
+  <data name="SystemLanguage" xml:space="preserve"><value>使用 Windows 显示语言</value></data>
+  <data name="Timeout" xml:space="preserve"><value>启动超时（秒）</value></data>
+  <data name="Version" xml:space="preserve"><value>版本</value></data>
+  <data name="Workspace" xml:space="preserve"><value>工作区</value></data>
+</root>

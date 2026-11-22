@@ -1,2 +1,3 @@
-Resources is owned by the mod. CGH exposes the absolute directory in IModContext and cgh_mod_info.
-Resource files are not automatically mounted into Source's virtual filesystem; a future CGH-LAPI can add that policy.
+Put files the mod reads in Resources/. Use IModContext.ResourcesDirectory or the
+resources_directory field in cgh_mod_info to find them at runtime. Use Addons/ for
+content that Garry's Mod should load through its addon system.

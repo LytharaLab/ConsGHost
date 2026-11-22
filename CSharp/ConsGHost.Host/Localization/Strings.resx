@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="AddFolder" xml:space="preserve"><value>Add folder</value></data>
+  <data name="Author" xml:space="preserve"><value>Author: {0}</value></data>
+  <data name="Browse" xml:space="preserve"><value>Browse…</value></data>
+  <data name="BrowseFor" xml:space="preserve"><value>Browse for {0}</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="CheckLaunch" xml:space="preserve"><value>Check launch settings</value></data>
+  <data name="ChooseExtraFolder" xml:space="preserve"><value>Select a folder containing x64 native DLLs</value></data>
+  <data name="Clear" xml:space="preserve"><value>Clear</value></data>
+  <data name="Collapse" xml:space="preserve"><value>Collapse</value></data>
+  <data name="ConfigEditFailed" xml:space="preserve"><value>Configuration error: {0}</value></data>
+  <data name="ConfigEmptyTemplate" xml:space="preserve"><value>This template has no fields. Use the JSON editor to make changes.</value></data>
+  <data name="ConfigSaveHint" xml:space="preserve"><value>Changes are saved in this mod’s config.json.</value></data>
+  <data name="ConfigTitle" xml:space="preserve"><value>Mod settings · {0}</value></data>
+  <data name="Configure" xml:space="preserve"><value>Configure…</value></data>
+  <data name="Connecting" xml:space="preserve"><value>Connecting</value></data>
+  <data name="Copy" xml:space="preserve"><value>Copy</value></data>
+  <data name="Dependencies" xml:space="preserve"><value>Dependencies</value></data>
+  <data name="Disabled" xml:space="preserve"><value>Disabled</value></data>
+  <data name="Disconnected" xml:space="preserve"><value>Disconnected</value></data>
+  <data name="DllFolder" xml:space="preserve"><value>Native DLL folder</value></data>
+  <data name="DotnetFolder" xml:space="preserve"><value>.NET 10 x64 root folder</value></data>
+  <data name="EditFolder" xml:space="preserve"><value>Edit folder</value></data>
+  <data name="Enabled" xml:space="preserve"><value>Enabled</value></data>
+  <data name="EnableGameFrame" xml:space="preserve"><value>Enable the Source GameFrame hook</value></data>
+  <data name="Environment" xml:space="preserve"><value>Runtime environment</value></data>
+  <data name="Expand" xml:space="preserve"><value>Expand</value></data>
+  <data name="ExtraEmpty" xml:space="preserve"><value>No extra DLL folders. Select Add folder to get started.</value></data>
+  <data name="ExtrasDescription" xml:space="preserve"><value>Manage folders of x64 DLLs that load into Garry’s Mod before mods.</value></data>
+  <data name="ExtrasPage" xml:space="preserve"><value>Extra DLLs</value></data>
+  <data name="ExtraSummary" xml:space="preserve"><value>Folders: {0} · Enabled: {1}</value></data>
+  <data name="FormEditor" xml:space="preserve"><value>Settings form</value></data>
+  <data name="GameArguments" xml:space="preserve"><value>Game arguments</value></data>
+  <data name="GameArgumentsHint" xml:space="preserve"><value>Game arguments, one per line. CGH handles quoting.</value></data>
+  <data name="GameFolder" xml:space="preserve"><value>Garry’s Mod folder</value></data>
+  <data name="GameFolderHint" xml:space="preserve"><value>Garry’s Mod folder containing gmod_win64.exe</value></data>
+  <data name="GameProcess" xml:space="preserve"><value>Game</value></data>
+  <data name="GameStartup" xml:space="preserve"><value>Game startup</value></data>
+  <data name="GmodAddons" xml:space="preserve"><value>GMod addons</value></data>
+  <data name="HostDescription" xml:space="preserve"><value>C# · C++ mod host</value></data>
+  <data name="HostLog" xml:space="preserve"><value>Host log</value></data>
+  <data name="IgnoredAddon" xml:space="preserve"><value>{0} (ignored)</value></data>
+  <data name="InsecureDefault" xml:space="preserve"><value>The default -insecure flag is for local native mod development.</value></data>
+  <data name="JsonEditor" xml:space="preserve"><value>JSON editor</value></data>
+  <data name="Language" xml:space="preserve"><value>Interface language</value></data>
+  <data name="LaunchGame" xml:space="preserve"><value>Launch game</value></data>
+  <data name="LoadAfter" xml:space="preserve"><value>Load after</value></data>
+  <data name="LogSummary" xml:space="preserve"><value>Events: {0} · Errors: {1}</value></data>
+  <data name="MetadataDisabled" xml:space="preserve"><value>Disabled in metadata</value></data>
+  <data name="MetadataDisabledHint" xml:space="preserve"><value>This mod is disabled in its metadata.</value></data>
+  <data name="ModDetails" xml:space="preserve"><value>Mod details</value></data>
+  <data name="ModList" xml:space="preserve"><value>Mods · {0}</value></data>
+  <data name="ModsDescription" xml:space="preserve"><value>Choose the mods for the next session and inspect their dependencies.</value></data>
+  <data name="ModsEmpty" xml:space="preserve"><value>No mods found. Put mods in the Mods folder and rescan.</value></data>
+  <data name="ModsFound" xml:space="preserve"><value>Mods found</value></data>
+  <data name="ModsPage" xml:space="preserve"><value>Mods</value></data>
+  <data name="ModuleCounts" xml:space="preserve"><value>Managed: {0} · Native: {1}</value></data>
+  <data name="Name" xml:space="preserve"><value>Name</value></data>
+  <data name="OpenModFolder" xml:space="preserve"><value>Open folder</value></data>
+  <data name="OpenMods" xml:space="preserve"><value>Open Mods</value></data>
+  <data name="OpenSessionLogs" xml:space="preserve"><value>Open session logs</value></data>
+  <data name="OptionalDependency" xml:space="preserve"><value>{0} (optional)</value></data>
+  <data name="Process" xml:space="preserve"><value>Process</value></data>
+  <data name="Ready" xml:space="preserve"><value>Ready</value></data>
+  <data name="Recursive" xml:space="preserve"><value>Include subfolders</value></data>
+  <data name="RemoveFolder" xml:space="preserve"><value>Remove folder</value></data>
+  <data name="Rescan" xml:space="preserve"><value>Rescan</value></data>
+  <data name="Running" xml:space="preserve"><value>Running · PID {0}</value></data>
+  <data name="Save" xml:space="preserve"><value>Save</value></data>
+  <data name="Saved" xml:space="preserve"><value>Saved</value></data>
+  <data name="SaveSettings" xml:space="preserve"><value>Save settings</value></data>
+  <data name="ScanIssues" xml:space="preserve"><value>Scan issues</value></data>
+  <data name="Search" xml:space="preserve"><value>Search</value></data>
+  <data name="SearchEmpty" xml:space="preserve"><value>No matching mods. Try another name or ID.</value></data>
+  <data name="SearchMods" xml:space="preserve"><value>Search mods</value></data>
+  <data name="SearchPlaceholder" xml:space="preserve"><value>Name or ID</value></data>
+  <data name="SelectMod" xml:space="preserve"><value>Select a mod to see its version, modules and dependencies.</value></data>
+  <data name="SettingsDescription" xml:space="preserve"><value>Set the interface language, paths and game startup options.</value></data>
+  <data name="SettingsPage" xml:space="preserve"><value>Settings</value></data>
+  <data name="Starting" xml:space="preserve"><value>Starting</value></data>
+  <data name="Stopping" xml:space="preserve"><value>Stopping</value></data>
+  <data name="StopSession" xml:space="preserve"><value>Stop session</value></data>
+  <data name="Subprocess" xml:space="preserve"><value>Worker</value></data>
+  <data name="SystemLanguage" xml:space="preserve"><value>Use Windows display language</value></data>
+  <data name="Timeout" xml:space="preserve"><value>Startup timeout (seconds)</value></data>
+  <data name="Version" xml:space="preserve"><value>Version</value></data>
+  <data name="Workspace" xml:space="preserve"><value>Workspace</value></data>
+</root>

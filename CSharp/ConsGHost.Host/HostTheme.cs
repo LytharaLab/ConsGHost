@@ -15,7 +15,7 @@ internal static class HostTheme
     internal static readonly Color Warning = Color.FromArgb(247, 202, 128);
     internal static readonly Color Error = Color.FromArgb(255, 151, 162);
 
-    internal static readonly Font Body = new("Microsoft YaHei UI", 9.5f);
+    internal static readonly Font Body = new("Segoe UI", 9.5f);
     internal static readonly Font Small = new(Body.FontFamily, 8.5f);
     internal static readonly Font Strong = new(Body.FontFamily, 10, FontStyle.Bold);
     internal static readonly Font Heading = new(Body.FontFamily, 20, FontStyle.Bold);

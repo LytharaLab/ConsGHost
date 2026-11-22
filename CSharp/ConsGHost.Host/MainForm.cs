@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using ConsGHost.Core;
 using static ConsGHost.Host.HostTheme;
 
@@ -8,15 +9,22 @@ public sealed partial class MainForm : Form
 {
     private readonly string _root = AppContext.BaseDirectory;
     private readonly TaskCompletionSource _initialized = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly UiText _ui;
+    private readonly List<Action> _textUpdates = [];
+    private readonly Exception? _settingsReadError;
     private HostSettings _settings = new();
     private RuntimeClient? _runtime;
     private ScanResult _catalog = new([], []);
     private string _state = "connecting";
+    private int _stateProcessId;
     private bool _refreshing, _settingsLoaded, _closing, _closed;
     private string SettingsPath => Path.Combine(_root, "cgh_settings.json");
 
     public MainForm()
     {
+        try { if (File.Exists(SettingsPath)) _settings = Json.Read<HostSettings>(SettingsPath); }
+        catch (Exception error) { _settingsReadError = error; }
+        _ui = new(CultureInfo.CurrentUICulture, _settings.UiLanguage);
         BuildInterface();
         SetState("connecting");
         _launch.Click += async (_, _) => await LaunchAsync();
@@ -29,7 +37,7 @@ public sealed partial class MainForm : Form
     {
         try
         {
-            _settings = File.Exists(SettingsPath) ? Json.Read<HostSettings>(SettingsPath) : new();
+            if (_settingsReadError != null) throw new InvalidDataException("Could not read CGH settings.", _settingsReadError);
             if (!File.Exists(SettingsPath)) Json.Write(SettingsPath, _settings);
             _game.Text = _settings.GameDirectory;
             _dotnet.Text = _settings.DotnetRoot;
@@ -42,23 +50,60 @@ public sealed partial class MainForm : Form
             _runtime = new(_root);
             _runtime.Message += OnMessage;
             await _runtime.ConnectAsync();
-            Append($"CGH Runtime {CghVersion.Current} 已连接。", "info");
+            Append($"Connected to CGH Runtime {CghVersion.Current}.", "info");
             _initialized.TrySetResult();
         }
         catch (Exception error)
         {
-            Append(error.ToString(), "error");
+            Append($"CGH could not initialize: {error}", "error");
             SetState("disconnected");
             _initialized.TrySetException(error);
         }
+    }
+
+    private void UpdateLanguageSelector()
+    {
+        int selected = UiText.LanguageIndex(_settings.UiLanguage);
+        _languageOptions[0].Text = _ui["SystemLanguage"];
+        for (int i = 0; i < _languageOptions.Count; i++) _languageOptions[i].Checked = i == selected;
+        string label = _languageOptions[selected].Text!;
+        _language.AccessibleName = $"{_ui["Language"]} · {label}";
+        _language.Text = $"{label}  ▾";
+    }
+
+    private void ChangeSelectedLanguage(string? preference)
+    {
+        if (!_settingsLoaded || string.Equals(preference, _settings.UiLanguage, StringComparison.OrdinalIgnoreCase)) return;
+
+        try { Persist(_settings with { UiLanguage = preference }); }
+        catch (Exception error)
+        {
+            ReportError(error);
+            return;
+        }
+
+        _ui.ChangeLanguage(preference);
+        SuspendLayout();
+        try
+        {
+            foreach (var update in _textUpdates) update();
+            _settingsFeedback.Text = "";
+            UpdatePageTitle();
+            UpdateStatusText();
+            SetLogExpanded(_logExpanded);
+            UpdateLogSummary();
+            PopulateMods();
+            UpdateExtraSummary();
+        }
+        finally { ResumeLayout(); }
     }
 
     private void RefreshMods()
     {
         _catalog = ModCatalog.Scan(Path.Combine(_root, "Mods"));
         PopulateMods();
-        foreach (var issue in _catalog.Issues) Append($"{issue.Directory}: {issue.Message}", "error");
-        Append($"扫描完成 · {_catalog.Mods.Count} 个模组，{_catalog.Issues.Count} 个问题。", "info");
+        foreach (var issue in _catalog.Issues) Append($"Mod folder {issue.Directory}: {issue.Message}", "error");
+        Append($"Scan complete · Mods: {_catalog.Mods.Count} · Issues: {_catalog.Issues.Count}", "info");
     }
 
     private bool IsEnabled(ModSpec mod) => mod.Metadata.Enabled && !_settings.DisabledMods.Contains(mod.Metadata.Id);
@@ -79,14 +124,14 @@ public sealed partial class MainForm : Form
                     !m.Id.Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
 
                 int index = _mods.Rows.Add(IsEnabled(mod), m.Name, m.Version,
-                    m.LoadAsSubprocess ? "独立子进程" : "GMod 进程");
+                    _ui[m.LoadAsSubprocess ? "Subprocess" : "GameProcess"]);
                 var row = _mods.Rows[index];
                 row.Tag = mod;
                 row.Cells[1].ToolTipText = m.Id;
                 if (!m.Enabled)
                 {
                     row.Cells[0].ReadOnly = true;
-                    row.Cells[0].ToolTipText = "模组元数据已禁用此模组。";
+                    row.Cells[0].ToolTipText = _ui["MetadataDisabledHint"];
                 }
 
                 if (m.Id == selectedId) selectedRow = row;
@@ -96,10 +141,8 @@ public sealed partial class MainForm : Form
         }
         finally { _refreshing = false; }
 
-        _modListTitle.Text = $"模组列表  ·  {_mods.RowCount}";
-        _modEmpty.Text = _catalog.Mods.Count == 0
-            ? "未发现模组。将模组放入 Mods 后重新扫描。"
-            : "没有匹配的模组。试试其他名称或 ID。";
+        _modListTitle.Text = _ui.Format("ModList", _mods.RowCount);
+        _modEmpty.Text = _ui[_catalog.Mods.Count == 0 ? "ModsEmpty" : "SearchEmpty"];
         _mods.Visible = _mods.RowCount > 0;
         _modEmpty.Visible = _mods.RowCount == 0;
         UpdateModSummary();
@@ -108,9 +151,9 @@ public sealed partial class MainForm : Form
 
     private void UpdateModSummary()
     {
-        _modCount.Text = _catalog.Mods.Count.ToString();
-        _enabledCount.Text = _catalog.Mods.Count(IsEnabled).ToString();
-        _issueCount.Text = _catalog.Issues.Count.ToString();
+        _modCount.Text = _catalog.Mods.Count.ToString(_ui.Culture);
+        _enabledCount.Text = _catalog.Mods.Count(IsEnabled).ToString(_ui.Culture);
+        _issueCount.Text = _catalog.Issues.Count.ToString(_ui.Culture);
         _issueCount.ForeColor = _catalog.Issues.Count > 0 ? Warning : HostTheme.Text;
     }
 
@@ -130,19 +173,19 @@ public sealed partial class MainForm : Form
 
         if (mod == null)
         {
-            Line("选择一个模组，查看它的版本、模块与依赖。", color: Muted);
+            Line(_ui["SelectMod"], color: Muted);
             return;
         }
 
         var m = mod.Metadata;
         bool enabled = IsEnabled(mod);
-        string status = !m.Enabled ? "元数据已禁用" : enabled ? "已启用" : "已停用";
+        string status = _ui[!m.Enabled ? "MetadataDisabled" : enabled ? "Enabled" : "Disabled"];
         Line(m.Name, Strong);
         Line($"{m.Id}  ·  v{m.Version}", Small, Muted);
         Line("");
-        Line($"{status}  ·  {(m.LoadAsSubprocess ? "独立子进程" : "GMod 进程")}", Strong, enabled ? Good : Muted);
-        Line($"Managed  {mod.Managed.Count}  /  Native  {mod.Native.Count}", Small, Muted);
-        if (!string.IsNullOrWhiteSpace(m.Author)) Line($"作者  {m.Author}", Small, Muted);
+        Line($"{status}  ·  {_ui[m.LoadAsSubprocess ? "Subprocess" : "GameProcess"]}", Strong, enabled ? Good : Muted);
+        Line(_ui.Format("ModuleCounts", mod.Managed.Count, mod.Native.Count), Small, Muted);
+        if (!string.IsNullOrWhiteSpace(m.Author)) Line(_ui.Format("Author", m.Author), Small, Muted);
         if (!string.IsNullOrWhiteSpace(m.Description))
         {
             Line("");
@@ -151,26 +194,27 @@ public sealed partial class MainForm : Form
         if (mod.Addons.Count > 0)
         {
             Line("");
-            Line("GMod 插件", Strong);
+            Line(_ui["GmodAddons"], Strong);
             foreach (var addon in mod.Addons)
-                Line(addon.Name + (addon.Ignored ? "  （已忽略）" : ""), Small, Muted);
+                Line(addon.Ignored ? _ui.Format("IgnoredAddon", addon.Name) : addon.Name, Small, Muted);
         }
         if (m.Dependencies.Count > 0)
         {
             Line("");
-            Line("依赖", Strong);
+            Line(_ui["Dependencies"], Strong);
             foreach (var dependency in m.Dependencies)
             {
                 string version = dependency.MinVersion == null ? "" : $"  ≥ {dependency.MinVersion}";
                 if (dependency.MaxVersionExclusive != null) version += $"  < {dependency.MaxVersionExclusive}";
-                Line(dependency.Id + version + (dependency.Optional ? "  （可选）" : ""), Small, Muted);
+                string label = dependency.Id + version;
+                Line(dependency.Optional ? _ui.Format("OptionalDependency", label) : label, Small, Muted);
             }
         }
 
         if (m.LoadAfter.Count > 0)
         {
             Line("");
-            Line("在以下模组之后加载", Strong);
+            Line(_ui["LoadAfter"], Strong);
             foreach (string id in m.LoadAfter) Line(id, Small, Muted);
         }
 
@@ -182,9 +226,9 @@ public sealed partial class MainForm : Form
     {
         if (_mods.CurrentRow?.Tag is not ModSpec mod) return;
         var config = ModConfig.Open(mod.Directory) ?? throw new FileNotFoundException(ModConfig.DefaultFileName);
-        using var dialog = new ModConfigDialog(mod.Metadata.Name, config);
+        using var dialog = new ModConfigDialog(mod.Metadata.Name, config, _ui);
         if (dialog.ShowDialog(this) == DialogResult.OK)
-            Append($"已保存模组配置 · {mod.Metadata.Id}", "info");
+            Append($"Mod settings saved · {mod.Metadata.Id}", "info");
     }
 
     private void OnModChanged(object? sender, DataGridViewCellEventArgs e)
@@ -231,7 +275,7 @@ public sealed partial class MainForm : Form
 
     private void UpdateExtraSummary()
     {
-        _extraSummary.Text = $"{_settings.ExtraLibraries.Count} 个目录  ·  {_settings.ExtraLibraries.Count(e => e.Enabled)} 个已启用";
+        _extraSummary.Text = _ui.Format("ExtraSummary", _settings.ExtraLibraries.Count, _settings.ExtraLibraries.Count(e => e.Enabled));
     }
 
     private void OnExtraChanged(object? sender, DataGridViewCellEventArgs e)
@@ -263,7 +307,7 @@ public sealed partial class MainForm : Form
         if (index < 0) return;
         using var dialog = new FolderBrowserDialog
         {
-            Description = "选择包含 x64 原生 DLL 的目录", UseDescriptionForTitle = true,
+            Description = _ui["ChooseExtraFolder"], UseDescriptionForTitle = true,
             SelectedPath = edit ? _settings.ExtraLibraries[index].Path : ""
         };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
@@ -311,8 +355,8 @@ public sealed partial class MainForm : Form
         SaveSettings();
         var selected = SessionPreparation.Prepare(_root, _settings);
         SetLogExpanded(true);
-        Append(selected.Count == 0 ? "启动配置检查通过。当前没有已启用的模组。"
-            : "启动配置检查通过 · " + string.Join(" → ", selected.Select(m => m.Metadata.Id)), "info");
+        Append(selected.Count == 0 ? "Launch settings are valid. No mods are enabled."
+            : $"Launch settings are valid · {string.Join(" → ", selected.Select(m => m.Metadata.Id))}", "info");
     }
 
     private async Task LaunchAsync()
@@ -360,19 +404,27 @@ public sealed partial class MainForm : Form
     private void SetState(string state, int pid = 0)
     {
         _state = state;
+        _stateProcessId = pid;
         bool busy = state is "starting" or "running" or "stopping";
         _launch.Enabled = state == "idle";
         _stop.Enabled = state is "starting" or "running";
         _workspace.Enabled = _settingsLoaded && !busy;
-        (_status.Text, _status.ForeColor) = state switch
+        UpdateStatusText();
+    }
+
+    private void UpdateStatusText()
+    {
+        var (text, color) = _state switch
         {
-            "connecting" => ("●  连接中", Warning),
-            "idle" => ("●  就绪", Good),
-            "starting" => ("●  启动中", Warning),
-            "running" => ($"●  运行中 · PID {pid}", Good),
-            "stopping" => ("●  停止中", Warning),
-            _ => ("●  未连接", Error)
+            "connecting" => (_ui["Connecting"], Warning),
+            "idle" => (_ui["Ready"], Good),
+            "starting" => (_ui["Starting"], Warning),
+            "running" => (_ui.Format("Running", _stateProcessId), Good),
+            "stopping" => (_ui["Stopping"], Warning),
+            _ => (_ui["Disconnected"], Error)
         };
+        _status.Text = $"●  {text}";
+        _status.ForeColor = color;
     }
 
     private void Append(string message, string level)
@@ -387,7 +439,8 @@ public sealed partial class MainForm : Form
         }
         _log.Select(_log.TextLength, 0);
         _log.SelectionColor = error ? Error : level == "warning" ? Warning : Muted;
-        _log.AppendText($"[{DateTime.Now:HH:mm:ss}]  {message}{Environment.NewLine}");
+        string time = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+        _log.AppendText($"[{time}]  {message}{Environment.NewLine}");
         _log.ScrollToCaret();
         UpdateLogSummary();
     }
@@ -407,7 +460,7 @@ public sealed partial class MainForm : Form
     private void ReportError(Exception error)
     {
         SetLogExpanded(true);
-        Append(error.Message, "error");
+        Append($"Operation failed: {error.Message}", "error");
     }
 
     private async void OnClosing(object? sender, FormClosingEventArgs e)
@@ -450,6 +503,7 @@ public sealed partial class MainForm : Form
             throw new InvalidOperationException("Host initial UI state is inconsistent.");
 
         Directory.CreateDirectory(output);
+        await CheckLocalizationAsync(output);
         if (_mods.Rows.Count > 0 && _mods.Rows[0].Tag is ModSpec mod)
         {
             _search.Text = Guid.NewGuid().ToString("N");
@@ -467,7 +521,7 @@ public sealed partial class MainForm : Form
         Directory.CreateDirectory(configFixture);
         File.WriteAllText(Path.Combine(configFixture, ModConfig.DefaultFileName), """{"enabled":true,"nested":{"count":1}}""");
         File.WriteAllText(Path.Combine(configFixture, "config.json"), """{"enabled":true,"extra":"keep"}""");
-        using (var dialog = new ModConfigDialog("CGH 配置自检", ModConfig.Open(configFixture)!))
+        using (var dialog = new ModConfigDialog("CGH", ModConfig.Open(configFixture)!, _ui))
         {
             dialog.Show(this);
             await dialog.CheckAndRenderAsync(output);
@@ -487,7 +541,7 @@ public sealed partial class MainForm : Form
         for (int i = 0; i < _pages.Count; ++i)
         {
             _pages[i].Navigation.PerformClick();
-            if (!_pages[i].Content.Visible || _title.Text != _pages[i].Title)
+            if (!_pages[i].Content.Visible || _title.Text != _ui[_pages[i].TitleKey])
                 throw new InvalidOperationException("Workspace navigation did not activate the expected page.");
             await RenderAsync($"page-{i}.png");
         }
@@ -499,7 +553,7 @@ public sealed partial class MainForm : Form
         await RenderAsync("compact-settings.png");
 
         File.WriteAllText(Path.Combine(output, "result.txt"),
-            "PASS: runtime connected, 3 pages rendered, navigation, search, persistence, both config editors, DLL page and log collapse checked.");
+            "PASS: runtime connected, navigation, search, settings persistence, both config editors, DLL page, log collapse, and English log output in all 5 interface languages checked.");
 
         void CheckToggle(DataGridViewCell cell, Func<HostSettings, bool> readValue)
         {

@@ -1,6 +1,20 @@
-# CGH 模组开发
+# Developing a CGH mod
 
-## 元数据 v1
+## Files and metadata
+
+Each mod is a directory under `Mods/` next to `ConsGHost.Host.exe`:
+
+```text
+Mods/MyMod/
+  cghm_metadata.json
+  config.default.json
+  Managed/MyMod.dll
+  Native/MyNative.dll
+  Resources/
+  Addons/
+```
+
+Only `cghm_metadata.json` is required. This example shows the fields accepted by the [metadata schema](cghm_metadata.schema.json):
 
 ```json
 {
@@ -8,7 +22,7 @@
   "id": "author.my-mod",
   "name": "My Mod",
   "version": "1.0.0",
-  "description": "模组说明",
+  "description": "A sample CGH mod",
   "author": "Author",
   "enabled": true,
   "loadAsSubprocess": false,
@@ -22,40 +36,31 @@
 }
 ```
 
-`id/name/version` 必填；id 以小写字母开头，仅含小写字母、数字、点、下划线和连字符，最多 64 字符。版本为 `major.minor.patch` 非负整数。
-启用状态由元数据 `enabled` 与宿主禁用列表共同决定。缺少强依赖、版本不匹配、重复 id、循环依赖都会阻止启动；可选依赖安装时仍检查版本并决定顺序。
-`loadAfter` 对已启用模组增加排序约束。版本 v1 不支持 prerelease、通配符或自动下载依赖。
+- `id`, `name`, and `version` are required. IDs start with a lowercase letter and contain at most 64 characters from `a-z`, `0-9`, `.`, `_`, and `-`. Versions use three nonnegative integer components. Dependency versions are checked when the dependency is present and enabled, including optional dependencies. Missing required dependencies, version mismatches, duplicate IDs, and dependency cycles all prevent launch.
+- `loadAfter` orders enabled mods. `enabled` and the host's disabled list determine whether the mod is active. Mods and their dependencies must already be installed. CGH v1 accepts numeric version bounds.
+- Omit `managedAssemblies` or `nativeLibraries` to scan the top-level DLLs in the corresponding directory. Use an empty array to select no entries. Listed paths can include subdirectories and must resolve inside `Managed/` or `Native/` without symlinks or junctions.
+- Put managed dependencies and any `.deps.json` beside the managed DLL. CGH instantiates every concrete `ICghMod` implementation with a public parameterless constructor. Use the host's shared SDK assembly and mark your reference `Private=false`.
+- Put native libraries and their dependencies under `Native/`. Use unique native DLL names within each process. Dependency declarations order lifecycle calls. Cross-mod APIs use services and messages across the mods' separate .NET load contexts.
 
-`managedAssemblies/nativeLibraries` 省略时扫描对应目录顶层所有 DLL；显式 `[]` 表示无入口。
-声明路径相对对应目录，可以指定子目录，禁止绝对路径、越界路径与 junction/symlink。
-托管 DLL 中所有非抽象 `ICghMod` 实现都会实例化，要求公共无参构造器；纯依赖程序集没有入口也合法。
-第三方 Managed 依赖和 `.deps.json` 应随 DLL 放进 `Managed`；引用 SDK 时设置 `Private=false`，使用宿主共享 SDK。
-Native 入口 DLL 与其依赖都放在 `Native`；DLL 文件名在同一进程中必须唯一，隔离进程各自独立。
-元数据依赖决定生命周期顺序，不会打通不同模组的 .NET 类型加载上下文；跨模组 API 通过服务和消息契约暴露。
+## Garry's Mod addons
 
-## GMod 插件
-
-CGH 1.1.0 起，模组可以在 `Addons/` 下提供任意数量的标准 GMod 插件。每个直属子目录是一个展开的插件，每个直属 `.gma` 文件是一个打包插件。模组也可以只提供插件和元数据。
+Since CGH 1.1.0, a mod can ship expanded addons as direct subdirectories of `Addons/`, and standard uncompressed GMAD archives as direct `.gma` files. A mod can consist entirely of addons and metadata.
 
 ```text
-Mods/MyMod/
-  cghm_metadata.json
-  Addons/
-    my_weapons/
-      lua/
-      materials/
-    my_maps.gma
-    developer_tools/
-      lua/
+Addons/
+  sample_addon/
+    lua/
+    materials/
+  sample_maps.gma
 ```
 
-`ignoredAddons` 是可选数组，填写当前模组内要跳过的直属子目录名或文件名。文件名须包含 `.gma` 扩展名。匹配忽略大小写，支持提前列出尚未安装的插件。其他顶层文件不会作为插件扫描。
+`ignoredAddons` lists direct child names, including the `.gma` suffix for archives. Matching is case-insensitive. Entries can refer to addons that have yet to be installed.
 
-CGH 在启动前为所有已启用模组暂存插件，包括设为独立子进程的模组。标准未压缩 GMAD 包会先展开成目录，因此目录插件和 `.gma` 都由 GMod 从 `garrysmod/addons` 加载。暂存目录使用 CGH 生成的唯一名称，已有游戏插件保留原位。修改源插件后，重开会话即可更新副本。会话停止、退出或启动回滚后会清理副本，强制终止后由下次 CGH 会话回收残留。游戏参数 `-noaddons` 会跳过 CGH 插件，使用这项功能时请保留默认 GMod 游戏目录。
+Before launch, CGH stages copies under `garrysmod/addons` for all enabled mods, including subprocess mods. Each staged addon gets a unique directory name. CGH removes its copies on shutdown or failed startup and can recover its own leftovers on a later run. Restart the session after editing source addons. Use the standard `garrysmod/` game directory and launch without `-noaddons` when exercising this feature.
 
-## 模组配置
+## Mod settings
 
-在模组根目录放置 `config.default.json`。文件是一个 JSON 对象，键和默认值同时定义简单配置界面的字段与类型。例如：
+Add a JSON object named `config.default.json` in the mod directory:
 
 ```json
 {
@@ -67,11 +72,11 @@ CGH 在启动前为所有已启用模组暂存插件，包括设为独立子进�
 }
 ```
 
-CGH 首次扫描时复制模板生成同目录的 `config.json`。重新扫描保留现有配置。新增的默认键在读取时递归补齐，未知键保留，数组整体作为一个值。模板为 `null` 的键可接受任意 JSON 类型。没有模板的模组仍可正常加载。
+CGH creates `config.json` on first discovery and preserves that file on subsequent scans. Reads fill in missing defaults recursively for objects and keep unknown keys. Arrays are values and are replaced as a whole. A `null` default permits any JSON type. Ship the default template with the mod and let each user generate their own configuration.
 
-在「模组管理」中选择模组后点击「配置…」。简单配置按字段提供复选框和输入框，数组和自由 JSON 值可以在单个字段中编辑。高级配置直接编辑完整 JSON，可用来修复手动编辑造成的格式错误。两种模式共享未保存的编辑，保存前校验 JSON 和模板类型。如果磁盘上的配置在编辑期间被其他进程修改，重新打开后再编辑。
+The mod manager offers a form based on the template and a raw JSON editor. Both share unsaved edits and validate JSON and field types before writing. Use the raw editor to repair malformed JSON. Reopen the editor if another process changes the file while you are editing it.
 
-### C# Config API
+### C# configuration API
 
 ```csharp
 if (context.Config is { } config)
@@ -82,82 +87,74 @@ if (context.Config is { } config)
 }
 ```
 
-`Read()` 返回当前有效配置快照，`Get<T>(key)` 读取顶层值，`Set(key, value)` 原子写入一个顶层值并保留其他键。API 每次读取磁盘，模组可自行选择重新读取的时机，建议在加载或明确的刷新操作中使用。
+`Read()` returns an effective snapshot. `Get<T>(key)` reads a top-level value. `Set(key, value)` updates one top-level value atomically and preserves the other keys. Reads consult the file, so read at load time or at an explicit refresh point if you need to avoid disk accesses in `Tick`.
 
-### 原生 Config API
+### C++ configuration API
 
-CGH 1.2.0 起，`cgh_host_api_config` 扩展表保留原 ABI v1 前缀。读取扩展前检查 `api->size >= sizeof(cgh_host_api_config)`。
+CGH 1.2.0 adds `cgh_host_api_config` after the original ABI v1 fields. Check `size` before accessing it:
 
 ```cpp
 if (api->size >= sizeof(cgh_host_api_config)) {
-    auto* config = reinterpret_cast<const cgh_host_api_config*>(api);
-    int32_t length = config->config_read(api->context, nullptr, 0);
-    if (length > 0) {
-        // 分配 length 字节后再次调用 config_read。若返回值更大，请按新长度重试。
-        const uint8_t interval[] = {'1', '.', '0'};
-        config->config_set(api->context, "interval", interval, sizeof(interval));
-    }
+    const auto* config = reinterpret_cast<const cgh_host_api_config*>(api);
+    const uint8_t interval[] = {'1', '.', '0'};
+    const int32_t status = config->config_set(api->context, "interval", interval, sizeof(interval));
+    if (status != 0) api->log(api->context, "warning", "Could not update interval");
 }
 ```
 
-`config_read` 返回 UTF-8 JSON 所需字节数，缓冲区足够时复制完整快照。数据不含 NUL 结尾。`config_set` 接收单个 JSON 值，成功返回 `0`。两者在模组未提供模板时返回 `-1`，发生参数或配置错误时返回 `-2`。
+`config_read` returns the byte count needed for a UTF-8 JSON snapshot and copies it if the supplied buffer fits. The snapshot has no trailing NUL. Pass a null buffer and zero capacity to obtain the size. If the file grows between calls, retry with the returned size. `config_set` accepts a single JSON value and returns `0` on success. Both return `-1` when the mod has no template and `-2` for an argument or configuration error.
 
-## C#
+## C# entry points
 
-目标 `net10.0-windows`，x64；引用发行目录 `SDK/ConsGHost.SDK.dll`，实现：
+Target `net10.0-windows` and x64, and reference `SDK/ConsGHost.SDK.dll` from the release archive:
 
 ```csharp
 using ConsGHost.SDK;
 
 public sealed class MyMod : ICghMod
 {
-    private IModContext context = null!;
-    public void Load(IModContext value)
+    public void Load(IModContext context)
     {
-        context = value;
         context.RegisterService("echo", (input, output) =>
         {
             if (output.Length < input.Length) return -3;
             input.CopyTo(output);
             return input.Length;
         });
-        context.Log("Loaded");
     }
+
     public void Start() { }
     public void Tick(double deltaSeconds) { }
     public void Stop() { }
 }
 ```
 
-`ResourcesDirectory` 为只读约定的资产目录，持久数据写 `DataDirectory`。`Stopping` 在清理时取消。
-不要从后台线程调用引擎对象，使用 `RunOnGameThread`；此队列只有实际引擎帧才会执行，每帧最多 256 项。
-`Call` 仅用于同进程目标；隔离进程间使用 `Subscribe/PublishAsync`。`FindNativeExport` 仅查本模组已映射的 Native DLL。
-Hook delegate 的生存期必须覆盖整个 Hook；不要对可能仍在执行的回调释放 trampoline。
+Read assets from `ResourcesDirectory` and write persistent state to `DataDirectory`. `Stopping` is canceled during cleanup. Use `RunOnGameThread` for work that touches engine objects. It runs from engine frames and drains up to 256 actions per frame. `Call` is for services in the active process, and `Subscribe` and `PublishAsync` work across processes. `FindNativeExport` looks up exports in this mod's mapped native libraries. Keep hook delegates alive while their hooks are installed.
 
-完整示例见 `CSharp/Examples/BridgeDemo` 和 `Observer`。
+The source tree includes working `BridgeDemo` and `Observer` projects under `CSharp/Examples/`.
 
-## C++
+## C++ entry points
 
-包含发行目录 `SDK/cgh_sdk.h`，按 Windows x64 编译。导出 `cgh_module_load`，其余 Start/Tick/Message/Stop 可选。
+Include `SDK/cgh_sdk.h` and compile for Windows x64. Export `cgh_module_load`. The Start, Tick, Message, and Stop exports are optional.
 
 ```cpp
 #include "cgh_sdk.h"
-static const cgh_host_api* host;
-CGH_EXPORT int32_t CGH_CALL cgh_module_load(const cgh_host_api* api, const cgh_mod_info* mod) {
+
+CGH_EXPORT int32_t CGH_CALL cgh_module_load(const cgh_host_api* api, const cgh_mod_info*) {
     if (!api || api->abi_version != 1 || api->size < sizeof(cgh_host_api)) return -1;
-    host = api;
-    host->log(host->context, "info", "Hello from native");
+    api->log(api->context, "info", "Hello from native code");
     return 0;
 }
-CGH_EXPORT void CGH_CALL cgh_module_stop() { /* join threads, release owned resources */ }
+
+CGH_EXPORT void CGH_CALL cgh_module_stop() {
+    // Join owned threads and release their resources.
+}
 ```
 
-API/info 指针在整个进程生命周期有效；文本为 UTF-8；缓冲区只在当前调用有效，想保留需复制。
-Load/Start 返回 0 才成功；失败仍尝试 Stop 以清理部分初始化。不得让 C++ 异常跨 C ABI；访问违规无法由框架安全恢复。
-Stop 必须结束自己启动的后台任务。CGH 自动禁用通过 SDK 注册的 Hook，但无法识别模组自行修改的内存或第三方 Hook。
-可以在一个模组内放多个 C#/C++ 入口；服务名在本模组内不可重复。
+The API and mod info pointers are valid for the process lifetime. Text uses UTF-8. Call buffers are borrowed and must be copied to retain their contents. Load and Start return `0` on success. CGH attempts Stop even after partial initialization. Keep C++ exceptions inside your mod and join any owned threads during Stop. CGH disables hooks registered through the SDK. Manage any hooks installed outside the SDK yourself.
 
-`loadAsSubprocess=true` 同时将该模组的 Managed 和 Native 部分放到同一个 MRT 进程，因此两侧仍可使用快速函数桥。
-隔离进程没有 GMod 地址空间访问权；不要把指针发往另一个进程使用。跨进程数据通过消息传递。
+Service names must be unique within a mod. `loadAsSubprocess: true` places both managed and native parts in the same worker, so they can still call each other's services. Use messages for data exchanged with the game process. Pointers refer to the address space that created them.
 
-CGH-LAPI 是独立模组。基础 SDK 提供托管和原生模组接口。
+## GLua bridge
+
+[CGH-LAPI](https://github.com/LytharaLab/ConsGHost/tree/master/OfficialMods/CGH-LAPI) is a separately installed mod for communication with the Garry's Mod client and server Lua realms. CGH's C# and C++ APIs are available without that mod.

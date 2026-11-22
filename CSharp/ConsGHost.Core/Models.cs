@@ -64,7 +64,8 @@ public sealed record ExtraLibraryDirectory
 }
 public sealed record HostSettings
 {
-    public string GameDirectory { get; set; } = @"L:\SteamLibrary\steamapps\common\GarrysMod";
+    public string? UiLanguage { get; set; }
+    public string GameDirectory { get; set; } = "";
     public List<string> GameArguments { get; set; } = ["-console", "-novid", "-insecure"];
     public List<string> DisabledMods { get; set; } = [];
     public List<ExtraLibraryDirectory> ExtraLibraries { get; set; } = [];

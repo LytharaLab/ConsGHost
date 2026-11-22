@@ -9,7 +9,18 @@ function Copy-CghDistribution {
     try {
         New-Item -ItemType Directory -Path $Destination -Force | Out-Null
         foreach ($project in @('ConsGHost.Host', 'ConsGHost.Runtime', 'ConsGHost.Bootstrap')) {
-            Copy-Item -Path "CSharp/$project/bin/$Configuration/net10.0-windows/*" -Destination $Destination -Force
+            Get-ChildItem -LiteralPath "CSharp/$project/bin/$Configuration/net10.0-windows" -File |
+                Where-Object Extension -ne '.pdb' |
+                Copy-Item -Destination $Destination -Force
+        }
+        $hostOutput = "CSharp/ConsGHost.Host/bin/$Configuration/net10.0-windows"
+        foreach ($culture in (Get-ChildItem -LiteralPath $hostOutput -Directory)) {
+            $satellite = Join-Path $culture.FullName 'ConsGHost.Host.resources.dll'
+            if (Test-Path -LiteralPath $satellite -PathType Leaf) {
+                $localeFolder = Join-Path $Destination $culture.Name
+                New-Item -ItemType Directory -Path $localeFolder -Force | Out-Null
+                Copy-Item -LiteralPath $satellite -Destination $localeFolder -Force
+            }
         }
         foreach ($name in @('cgh_mrt_win64.exe', 'cgh_runtime_win64.dll')) {
             Copy-Item -LiteralPath "Cpp/build/$Configuration/$name" -Destination $Destination -Force
@@ -25,7 +36,7 @@ function Copy-CghDistribution {
             if (Test-Path -LiteralPath $defaultConfig) {
                 Copy-Item -LiteralPath $defaultConfig -Destination $modRoot -Force
             }
-            Copy-Item -Path "CSharp/Examples/$name/bin/$Configuration/net10.0-windows/$name.*" -Destination "$modRoot/Managed" -Force
+            Copy-Item -Path "CSharp/Examples/$name/bin/$Configuration/net10.0-windows/$name.*" -Exclude '*.pdb' -Destination "$modRoot/Managed" -Force
         }
         Copy-Item -LiteralPath "Cpp/build/$Configuration/cgh_example_native.dll" -Destination "$Destination/Mods/BridgeDemo/Native" -Force
         $resource = "$Destination/Mods/BridgeDemo/Resources/readme.txt"
@@ -36,8 +47,19 @@ function Copy-CghDistribution {
         Copy-Item -LiteralPath 'Cpp/include/cgh_sdk.h' -Destination "$Destination/SDK" -Force
         Copy-Item -LiteralPath "$Destination/ConsGHost.SDK.dll" -Destination "$Destination/SDK" -Force
         Copy-Item -LiteralPath 'Cpp/third_party/minhook-1.3.4/LICENSE.txt' -Destination "$Destination/licenses/MinHook.txt" -Force
-        Copy-Item -LiteralPath 'README.md', 'CHANGELOG.md', 'LICENSE' -Destination $Destination -Force
-        Copy-Item -LiteralPath 'docs' -Destination $Destination -Recurse -Force
+        $dotnetRoot = Split-Path -Parent (Get-Command dotnet -CommandType Application).Source
+        Copy-Item -LiteralPath (Join-Path $dotnetRoot 'LICENSE.txt') -Destination "$Destination/licenses/dotnet-LICENSE.txt" -Force
+        Copy-Item -LiteralPath (Join-Path $dotnetRoot 'ThirdPartyNotices.txt') -Destination "$Destination/licenses/dotnet-ThirdPartyNotices.txt" -Force
+        Copy-Item -LiteralPath 'README.md', 'CHANGELOG.md', 'LICENSE', 'NOTICE.md', 'SECURITY.md' -Destination $Destination -Force
+        $publicDocs = @(
+            'architecture.md', 'cghm_metadata.schema.json', 'mod-development.md', 'verification.md',
+            'readme/README.zh-CN.md', 'readme/README.ru.md', 'readme/README.es.md', 'readme/README.fr.md'
+        )
+        foreach ($doc in $publicDocs) {
+            $target = Join-Path $Destination "docs/$doc"
+            New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
+            Copy-Item -LiteralPath "docs/$doc" -Destination $target -Force
+        }
 
         $runtime = Join-Path $Destination 'ConsGHost.Runtime.exe'
         $expected = $Version.ToString()

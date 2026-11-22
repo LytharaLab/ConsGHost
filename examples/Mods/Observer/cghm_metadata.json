@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "cgh.observer",
-  "name": "CGH 隔离模组示例",
+  "name": "CGH Subprocess Demo",
   "version": "1.0.0",
-  "description": "独立 MRT 子进程，通过运行时与 GMod 模组交换消息。",
+  "description": "Runs in a separate process and exchanges messages with a mod in Garry's Mod.",
   "author": "ConsGHost",
   "loadAsSubprocess": true,
   "dependencies": [{"id": "cgh.example", "minVersion": "1.0.0", "maxVersionExclusive": "2.0.0"}],

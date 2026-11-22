@@ -1,18 +1,24 @@
-# 更新日志
+# Changelog
+
+## 1.2.1
+
+- The desktop host supports English, Simplified Chinese, Russian, Spanish, and French. It follows the Windows display language by default and falls back to English.
+- The interface language can be changed in Settings without restarting CGH. The selection is saved with the host settings.
+- The host writes its log messages in English for every interface language.
 
 ## 1.2.0
 
-- 扫描带有 `config.default.json` 的模组时初始化 `config.json`。模组管理支持简单表单和高级 JSON 编辑。
-- C# SDK 和原生 SDK 提供配置读取与写入 API。配置按模组保存，读取时使用默认值补齐缺少的键。
+- Use `config.default.json` to define settings for a mod. On discovery, CGH creates `config.json` if it is missing. The mod manager offers both a settings form and a raw JSON editor.
+- C# and C++ mods can read and update their own settings. Reads fill in missing keys from the defaults and preserve custom keys.
 
 ## 1.1.0
 
-- CGH 模组可通过 `Addons/` 加载多个标准 GMod 插件目录和 `.gma` 包。
-- 模组元数据的 `ignoredAddons` 可按名称跳过指定插件。宿主详情显示发现的插件和忽略状态。
-- CGH 在会话启动前暂存插件，停止、退出或启动失败时清理副本。
+- Load regular Garry's Mod addon directories and `.gma` files from a CGH mod's `Addons/` folder.
+- Use `ignoredAddons` in mod metadata to skip addons by name. The mod manager lists discovered addons and shows which ones are skipped.
+- Stage enabled addons before the game starts and clean up the staged copies when the session ends or startup fails.
 
 ## 1.0.0
 
-- CGH 的托管程序集、原生宿主组件和发行包统一从 `VERSION` 读取产品版本。
-- 宿主窗口和会话日志显示当前版本。运行时可通过命令行查询版本或检查发行目录中的组件版本。
-- 发行脚本使用干净的暂存目录生成带版本号的 Windows x64 压缩包，并生成 SHA-256 校验文件。
+- Set the product version of managed components, native components, and release archives from `VERSION`.
+- Show the product version in the host and the session log. Query it or verify a distribution from the runtime command line.
+- Build versioned Windows x64 ZIPs with SHA-256 checksums from a fresh staging directory.

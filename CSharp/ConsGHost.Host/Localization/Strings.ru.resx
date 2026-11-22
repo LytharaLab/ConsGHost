@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="AddFolder" xml:space="preserve"><value>Добавить папку</value></data>
+  <data name="Author" xml:space="preserve"><value>Автор: {0}</value></data>
+  <data name="Browse" xml:space="preserve"><value>Обзор…</value></data>
+  <data name="BrowseFor" xml:space="preserve"><value>Выбрать: {0}</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Отмена</value></data>
+  <data name="CheckLaunch" xml:space="preserve"><value>Проверить запуск</value></data>
+  <data name="ChooseExtraFolder" xml:space="preserve"><value>Выберите папку с нативными DLL x64</value></data>
+  <data name="Clear" xml:space="preserve"><value>Очистить</value></data>
+  <data name="Collapse" xml:space="preserve"><value>Свернуть</value></data>
+  <data name="ConfigEditFailed" xml:space="preserve"><value>Ошибка конфигурации: {0}</value></data>
+  <data name="ConfigEmptyTemplate" xml:space="preserve"><value>В шаблоне нет полей. Внесите изменения в редакторе JSON.</value></data>
+  <data name="ConfigSaveHint" xml:space="preserve"><value>Изменения сохраняются в файле config.json этого мода.</value></data>
+  <data name="ConfigTitle" xml:space="preserve"><value>Настройки мода · {0}</value></data>
+  <data name="Configure" xml:space="preserve"><value>Настроить…</value></data>
+  <data name="Connecting" xml:space="preserve"><value>Подключение</value></data>
+  <data name="Copy" xml:space="preserve"><value>Копировать</value></data>
+  <data name="Dependencies" xml:space="preserve"><value>Зависимости</value></data>
+  <data name="Disabled" xml:space="preserve"><value>Отключено</value></data>
+  <data name="Disconnected" xml:space="preserve"><value>Нет подключения</value></data>
+  <data name="DllFolder" xml:space="preserve"><value>Папка с нативными DLL</value></data>
+  <data name="DotnetFolder" xml:space="preserve"><value>Корневая папка .NET 10 x64</value></data>
+  <data name="EditFolder" xml:space="preserve"><value>Изменить папку</value></data>
+  <data name="Enabled" xml:space="preserve"><value>Включено</value></data>
+  <data name="EnableGameFrame" xml:space="preserve"><value>Включить перехват GameFrame в Source</value></data>
+  <data name="Environment" xml:space="preserve"><value>Среда выполнения</value></data>
+  <data name="Expand" xml:space="preserve"><value>Развернуть</value></data>
+  <data name="ExtraEmpty" xml:space="preserve"><value>Папок с дополнительными DLL пока нет. Нажмите «Добавить папку».</value></data>
+  <data name="ExtrasDescription" xml:space="preserve"><value>Управляйте папками с DLL x64, которые загружаются в Garry’s Mod перед модами.</value></data>
+  <data name="ExtrasPage" xml:space="preserve"><value>Доп. DLL</value></data>
+  <data name="ExtraSummary" xml:space="preserve"><value>Папки: {0} · Включено: {1}</value></data>
+  <data name="FormEditor" xml:space="preserve"><value>Форма настроек</value></data>
+  <data name="GameArguments" xml:space="preserve"><value>Аргументы игры</value></data>
+  <data name="GameArgumentsHint" xml:space="preserve"><value>По одному аргументу на строку. CGH расставляет кавычки.</value></data>
+  <data name="GameFolder" xml:space="preserve"><value>Папка Garry’s Mod</value></data>
+  <data name="GameFolderHint" xml:space="preserve"><value>Папка Garry’s Mod с файлом gmod_win64.exe</value></data>
+  <data name="GameProcess" xml:space="preserve"><value>Игра</value></data>
+  <data name="GameStartup" xml:space="preserve"><value>Запуск игры</value></data>
+  <data name="GmodAddons" xml:space="preserve"><value>Дополнения GMod</value></data>
+  <data name="HostDescription" xml:space="preserve"><value>Хост модов C# · C++</value></data>
+  <data name="HostLog" xml:space="preserve"><value>Журнал CGH</value></data>
+  <data name="IgnoredAddon" xml:space="preserve"><value>{0} (пропущено)</value></data>
+  <data name="InsecureDefault" xml:space="preserve"><value>Параметр -insecure по умолчанию предназначен для локальной разработки модов.</value></data>
+  <data name="JsonEditor" xml:space="preserve"><value>Редактор JSON</value></data>
+  <data name="Language" xml:space="preserve"><value>Язык интерфейса</value></data>
+  <data name="LaunchGame" xml:space="preserve"><value>Запустить игру</value></data>
+  <data name="LoadAfter" xml:space="preserve"><value>Загрузить после</value></data>
+  <data name="LogSummary" xml:space="preserve"><value>События: {0} · Ошибки: {1}</value></data>
+  <data name="MetadataDisabled" xml:space="preserve"><value>Отключено в метаданных</value></data>
+  <data name="MetadataDisabledHint" xml:space="preserve"><value>Мод отключён в его метаданных.</value></data>
+  <data name="ModDetails" xml:space="preserve"><value>Сведения о моде</value></data>
+  <data name="ModList" xml:space="preserve"><value>Моды · {0}</value></data>
+  <data name="ModsDescription" xml:space="preserve"><value>Выберите моды для следующего сеанса и проверьте их зависимости.</value></data>
+  <data name="ModsEmpty" xml:space="preserve"><value>Моды не найдены. Поместите их в папку Mods и обновите список.</value></data>
+  <data name="ModsFound" xml:space="preserve"><value>Найдено модов</value></data>
+  <data name="ModsPage" xml:space="preserve"><value>Моды</value></data>
+  <data name="ModuleCounts" xml:space="preserve"><value>.NET: {0} · Нативные: {1}</value></data>
+  <data name="Name" xml:space="preserve"><value>Название</value></data>
+  <data name="OpenModFolder" xml:space="preserve"><value>Открыть папку</value></data>
+  <data name="OpenMods" xml:space="preserve"><value>Открыть Mods</value></data>
+  <data name="OpenSessionLogs" xml:space="preserve"><value>Открыть журналы</value></data>
+  <data name="OptionalDependency" xml:space="preserve"><value>{0} (необязательно)</value></data>
+  <data name="Process" xml:space="preserve"><value>Процесс</value></data>
+  <data name="Ready" xml:space="preserve"><value>Готово</value></data>
+  <data name="Recursive" xml:space="preserve"><value>Включая подпапки</value></data>
+  <data name="RemoveFolder" xml:space="preserve"><value>Удалить из списка</value></data>
+  <data name="Rescan" xml:space="preserve"><value>Обновить список</value></data>
+  <data name="Running" xml:space="preserve"><value>Запущено · PID {0}</value></data>
+  <data name="Save" xml:space="preserve"><value>Сохранить</value></data>
+  <data name="Saved" xml:space="preserve"><value>Сохранено</value></data>
+  <data name="SaveSettings" xml:space="preserve"><value>Сохранить настройки</value></data>
+  <data name="ScanIssues" xml:space="preserve"><value>Проблемы поиска</value></data>
+  <data name="Search" xml:space="preserve"><value>Поиск</value></data>
+  <data name="SearchEmpty" xml:space="preserve"><value>Нет подходящих модов. Попробуйте другое название или ID.</value></data>
+  <data name="SearchMods" xml:space="preserve"><value>Поиск модов</value></data>
+  <data name="SearchPlaceholder" xml:space="preserve"><value>Имя или ID</value></data>
+  <data name="SelectMod" xml:space="preserve"><value>Выберите мод, чтобы увидеть его версию, модули и зависимости.</value></data>
+  <data name="SettingsDescription" xml:space="preserve"><value>Настройте язык интерфейса, пути и параметры запуска игры.</value></data>
+  <data name="SettingsPage" xml:space="preserve"><value>Настройки</value></data>
+  <data name="Starting" xml:space="preserve"><value>Запуск</value></data>
+  <data name="Stopping" xml:space="preserve"><value>Остановка</value></data>
+  <data name="StopSession" xml:space="preserve"><value>Остановить сеанс</value></data>
+  <data name="Subprocess" xml:space="preserve"><value>Подпроцесс</value></data>
+  <data name="SystemLanguage" xml:space="preserve"><value>Язык интерфейса Windows</value></data>
+  <data name="Timeout" xml:space="preserve"><value>Ожидание запуска (с)</value></data>
+  <data name="Version" xml:space="preserve"><value>Версия</value></data>
+  <data name="Workspace" xml:space="preserve"><value>Рабочая область</value></data>
+</root>

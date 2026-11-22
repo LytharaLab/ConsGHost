@@ -5,8 +5,10 @@ public static class SessionPreparation
     public static List<ModSpec> Prepare(string root, HostSettings settings)
     {
         CghVersion.VerifyDistribution(root);
+        if (string.IsNullOrWhiteSpace(settings.GameDirectory))
+            throw new InvalidDataException("Choose the Garry's Mod directory containing gmod_win64.exe.");
         if (settings.GameArguments == null || settings.DisabledMods == null || settings.ExtraLibraries == null ||
-            string.IsNullOrWhiteSpace(settings.GameDirectory) || string.IsNullOrWhiteSpace(settings.DotnetRoot))
+            string.IsNullOrWhiteSpace(settings.DotnetRoot))
             throw new InvalidDataException("Settings paths and lists cannot be null/empty.");
         if (settings.StartupTimeoutSeconds is < 10 or > 600) throw new InvalidDataException("Startup timeout must be 10-600 seconds.");
         var game = Path.Combine(settings.GameDirectory, "gmod_win64.exe");

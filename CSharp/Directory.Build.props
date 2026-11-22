@@ -12,6 +12,10 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <!-- Prevent managed assemblies and app hosts from recording the build machine's symbol paths. -->
+    <DebugType>none</DebugType>
+  </PropertyGroup>
   <Target Name="ValidateCghProductVersion" BeforeTargets="GetAssemblyVersion">
     <PropertyGroup>
       <_CghVersionFormatValid>$([System.Text.RegularExpressions.Regex]::IsMatch('$(CghProductVersion)', '^(0|[1-9][0-9]{0,4})\.(0|[1-9][0-9]{0,4})\.(0|[1-9][0-9]{0,4})$'))</_CghVersionFormatValid>

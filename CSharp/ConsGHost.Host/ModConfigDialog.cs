@@ -8,13 +8,14 @@ namespace ConsGHost.Host;
 internal sealed class ModConfigDialog : Form
 {
     private readonly ModConfig _config;
+    private readonly UiText _ui;
     private readonly string _original;
-    private readonly Button _simpleButton = Action("简单配置");
-    private readonly Button _advancedButton = Action("高级配置");
+    private readonly Button _simpleButton;
+    private readonly Button _advancedButton;
     private readonly Panel _simple = new() { Dock = DockStyle.Fill, AutoScroll = true };
     private readonly RichTextBox _json = new()
     {
-        AccessibleName = "JSON 配置", Dock = DockStyle.Fill, BackColor = Input, ForeColor = HostTheme.Text,
+        Dock = DockStyle.Fill, BackColor = Input, ForeColor = HostTheme.Text,
         Font = Mono, WordWrap = false, AcceptsTab = true, DetectUrls = false, BorderStyle = BorderStyle.FixedSingle
     };
     private readonly Label _feedback = Caption("", Small, Error);
@@ -22,12 +23,16 @@ internal sealed class ModConfigDialog : Form
     private JsonObject _draft = new();
     private bool _advanced = true;
 
-    public ModConfigDialog(string name, ModConfig config)
+    public ModConfigDialog(string name, ModConfig config, UiText ui)
     {
         _config = config;
+        _ui = ui;
         _original = config.ReadRaw();
+        _json.AccessibleName = ui["JsonEditor"];
         _json.Text = _original;
-        Text = $"配置 · {name}";
+        _simpleButton = Action(ui["FormEditor"]);
+        _advancedButton = Action(ui["JsonEditor"]);
+        Text = ui.Format("ConfigTitle", name);
         Font = Body;
         BackColor = Canvas;
         ForeColor = HostTheme.Text;
@@ -40,14 +45,14 @@ internal sealed class ModConfigDialog : Form
         var body = Stack();
         body.Padding = new(16);
         Row(body, Caption(name, Heading), SizeType.Absolute, 43);
-        Row(body, Caption("保存后写入此模组的 config.json。", Small, Muted), SizeType.Absolute, 28);
+        Row(body, Caption(ui["ConfigSaveHint"], Small, Muted), SizeType.Absolute, 28);
         Row(body, Actions(_simpleButton, _advancedButton), SizeType.Absolute, 43);
         var workspace = new Panel { Dock = DockStyle.Fill, BackColor = Surface };
         workspace.Controls.AddRange([_simple, _json]);
         Row(body, workspace, SizeType.Percent, 100);
         Row(body, _feedback, SizeType.Absolute, 43);
-        var save = Action("保存", primary: true);
-        var cancel = Action("取消");
+        var save = Action(ui["Save"], primary: true);
+        var cancel = Action(ui["Cancel"]);
         cancel.DialogResult = DialogResult.Cancel;
         CancelButton = cancel;
         Row(body, Actions(save, cancel), SizeType.Absolute, 38);
@@ -93,7 +98,7 @@ internal sealed class ModConfigDialog : Form
         fields.Padding = new(12);
         _simple.Controls.Add(fields);
         if (defaults.Count == 0)
-            Row(fields, Caption("模板没有定义字段，可在高级配置中编辑 JSON。", color: Muted), SizeType.Absolute, 36);
+            Row(fields, Caption(_ui["ConfigEmptyTemplate"], color: Muted), SizeType.Absolute, 36);
         AddFields(fields, defaults, _draft, "");
     }
 
@@ -159,7 +164,7 @@ internal sealed class ModConfigDialog : Form
         try { _feedback.Text = ""; action(); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
         {
-            _feedback.Text = error.Message;
+            _feedback.Text = _ui.Format("ConfigEditFailed", error.Message);
         }
     }
 
