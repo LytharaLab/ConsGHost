@@ -2,10 +2,14 @@
 param(
     [Parameter(Mandatory)][string]$GameDirectory,
     [string]$CghDistribution = (Join-Path $PSScriptRoot '../../artifacts/CGH'),
-    [string]$PackageDirectory = (Join-Path $PSScriptRoot 'out/package'),
+    [string]$PackageDirectory,
     [string]$OutputDirectory = (Join-Path $PSScriptRoot 'out/smoke')
 )
 $ErrorActionPreference = 'Stop'
+if (!$PackageDirectory) {
+    $metadata = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'cghm_metadata.json') -Raw | ConvertFrom-Json
+    $PackageDirectory = Join-Path $PSScriptRoot "out/package-$($metadata.version)"
+}
 if (Get-Process -Name 'gmod', 'gmod_win64' -ErrorAction SilentlyContinue |
     Where-Object { !$_.WaitForExit(0) }) {
     throw 'Close the existing GMod session before running the smoke test.'
@@ -41,43 +45,9 @@ foreach ($isolated in $false, $true) {
     } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$mod/cghm_metadata.json" -Encoding utf8
 }
 
-$files = [ordered]@{
-    'garrysmod/lua/bin/gmsv_cgh_lapi_win64.dll' = "$PackageDirectory/GMod/garrysmod/lua/bin/gmsv_cgh_lapi_win64.dll"
-    'garrysmod/lua/bin/gmcl_cgh_lapi_win64.dll' = "$PackageDirectory/GMod/garrysmod/lua/bin/gmcl_cgh_lapi_win64.dll"
-    'garrysmod/lua/autorun/cgh_lapi.lua' = "$PackageDirectory/GMod/garrysmod/lua/autorun/cgh_lapi.lua"
-    'garrysmod/lua/autorun/cgh_lapi_test.lua' = "$PSScriptRoot/tests/cgh_lapi_test.lua"
-}
+$testAddon = "$distribution/Mods/cgh.lapi.test/Addons/cgh_lapi_test/lua/autorun"
+New-Item -ItemType Directory -Path $testAddon -Force | Out-Null
+Copy-Item -LiteralPath "$PSScriptRoot/tests/cgh_lapi_test.lua" -Destination $testAddon
 
-foreach ($relative in $files.Keys) {
-    $target = Join-Path $GameDirectory $relative
-    if (Test-Path -LiteralPath $target) { throw "The smoke test requires an unoccupied file path: $target" }
-    if (!(Test-Path -LiteralPath $files[$relative] -PathType Leaf)) { throw "Missing test input: $($files[$relative])" }
-    if (!(Test-Path -LiteralPath (Split-Path $target -Parent) -PathType Container)) { throw "Missing GMod Lua directory for $target" }
-}
-
-$installed = [System.Collections.Generic.List[string]]::new()
-try {
-    foreach ($relative in $files.Keys) {
-        $target = Join-Path $GameDirectory $relative
-        [IO.File]::Copy($files[$relative], $target, $false)
-        $installed.Add($target)
-    }
-
-    & dotnet "$testDirectory/build/bin/Runner/release/LapiRunner.dll" $distribution $GameDirectory
-    if ($LASTEXITCODE -ne 0) { throw "CGH-LAPI smoke test failed. Logs are under $distribution/Sessions." }
-} finally {
-    $cleanupErrors = @()
-    foreach ($file in $installed) {
-        for ($attempt = 0; $attempt -lt 20; $attempt++) {
-            if (!(Test-Path -LiteralPath $file)) { break }
-            try {
-                Remove-Item -LiteralPath $file -ErrorAction Stop
-                break
-            } catch {
-                if ($attempt -eq 19) { $cleanupErrors += "$file ($($_.Exception.Message))" }
-                else { Start-Sleep -Milliseconds 250 }
-            }
-        }
-    }
-    if ($cleanupErrors.Count) { throw "Could not remove smoke-test files: $($cleanupErrors -join ', ')" }
-}
+& dotnet "$testDirectory/build/bin/Runner/release/LapiRunner.dll" $distribution $GameDirectory
+if ($LASTEXITCODE -ne 0) { throw "CGH-LAPI smoke test failed. Logs are under $distribution/Sessions." }

@@ -2,14 +2,11 @@ if MENU_DLL or not (SERVER or CLIENT) then return end
 local realm = SERVER and "server" or "client"
 
 local function loadBridge()
-    if util.IsBinaryModuleInstalled and not util.IsBinaryModuleInstalled("cgh_lapi") then
-        error("cgh_lapi binary module is missing", 0)
-    end
-    require("cgh_lapi")
-    local bridge = cgh
-    if not bridge or not (bridge._Attach and bridge._Poll and bridge.Call and bridge.Publish) then
-        error("cgh_lapi binary module did not expose the bridge", 0)
-    end
+    -- The CGH native mod supplies this factory. In ordinary GMod it returns nil.
+    local factory = CompileString("return nil", "CGH-LAPI/0.2.0/bootstrap", false)
+    if type(factory) ~= "function" then return end
+    local bridge = factory()
+    if not bridge then return end
 
     function bridge.GetVersion()
         return {
@@ -26,7 +23,7 @@ local function loadBridge()
     return bridge, assert(util.TableToJSON(bridge.GetVersion()), "could not encode realm version")
 end
 
-local loaded, bridge, version = pcall(loadBridge)
+local bridge, version
 local attached = false
 local retryAt = 0
 local attachError
@@ -48,30 +45,41 @@ hook.Add("InitPostEntity", selfTestHook, function()
 end)
 
 local function checkBridge()
-    if not loaded then error(bridge, 0) end
     if not attached then error("could not attach to CGH (error " .. tostring(attachError) .. ")", 0) end
-    if not bridge._CheckVersion then error("Lua binary module is missing the 0.1.1 self-test entry point", 0) end
     local reply, code = bridge._CheckVersion()
     if reply == nil then error("CGH version service returned error " .. tostring(code), 0) end
     if reply ~= version then error("CGH version service returned different realm metadata", 0) end
     return "GLua <-> CGH version round trip OK"
 end
 
+local function connect()
+    if not bridge then
+        bridge, version = loadBridge()
+        if not bridge then return end
+        cgh = bridge
+    end
+    local status
+    status, attachError = bridge._Attach(version)
+    attached = status == 0
+end
+
+connect()
 hook.Add("Think", "CGH-LAPI.Dispatch", function()
     local now = SysTime()
-    if loaded and not attached and now >= retryAt then
+    if not attached and now >= retryAt then
         retryAt = now + 0.25
-        local status
-        status, attachError = bridge._Attach(version)
-        attached = status == 0
+        connect()
     end
 
-    if checkDeadline and (attached or not loaded or now >= checkDeadline) then
+    if checkDeadline and (attached or now >= checkDeadline) then
         checkDeadline = nil
+        if not bridge then
+            hook.Remove("Think", "CGH-LAPI.Dispatch")
+            return
+        end
         local ok, detail = pcall(checkBridge)
         Msg(string.format("[CGH-LAPI] Self-test %s [%s, %s]: %s\n",
             ok and "PASS" or "FAIL", realm, game.GetMap(), tostring(detail)))
-        if not loaded then hook.Remove("Think", "CGH-LAPI.Dispatch") end
     end
 
     if not attached then return end

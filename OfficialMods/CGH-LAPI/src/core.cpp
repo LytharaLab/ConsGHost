@@ -1,5 +1,4 @@
 #include "api.h"
-#include "cgh_sdk.h"
 #include <windows.h>
 
 #include <array>
@@ -30,6 +29,7 @@ bool started = false;
 PTP_TIMER console_timer = nullptr;
 ULONGLONG console_deadline = 0;
 bool console_pending = false;
+bool glua_pending = false;
 
 using ConsoleMsg = void (__cdecl*)(const char*, ...);
 
@@ -51,20 +51,36 @@ ConsoleMsg find_console() {
 }
 
 void CALLBACK report_startup(PTP_CALLBACK_INSTANCE, void*, PTP_TIMER timer) {
-    ConsoleMsg print;
     const cgh_host_api* api;
     {
         std::scoped_lock lock(state_mutex);
-        if (!console_pending || timer != console_timer) return;
-        print = find_console();
-        if (!print && GetTickCount64() < console_deadline) return;
-        console_pending = false;
-        SetThreadpoolTimer(timer, nullptr, 0, 0);
+        if (timer != console_timer) return;
         api = host;
     }
 
-    if (print) print("%s", "[CGH-LAPI] v" LAPI_VERSION " startup test: Source console online.\n");
-    else if (api->log) api->log(api->context, "warn", "Source console startup test timed out.");
+    const bool expired = GetTickCount64() >= console_deadline;
+    if (console_pending) {
+        if (const auto print = find_console()) {
+            print("%s", "[CGH-LAPI] v" LAPI_VERSION " startup test: Source console online.\n");
+            console_pending = false;
+        } else if (expired) {
+            if (api->log) api->log(api->context, "warn", "Source console startup test timed out.");
+            console_pending = false;
+        }
+    }
+    if (glua_pending) {
+        if (install_glua(*api)) glua_pending = false;
+        else if (expired) {
+            if (api->log) api->log(api->context, "warn", "CGH-LAPI timed out waiting for lua_shared.dll.");
+            glua_pending = false;
+        }
+    }
+
+    std::scoped_lock lock(state_mutex);
+    if (timer == console_timer && (console_pending || glua_pending)) {
+        auto due = std::bit_cast<FILETIME>(-1000000LL); // 100 ms, in 100 ns units.
+        SetThreadpoolTimer(timer, &due, 0, 0);
+    }
 }
 
 RealmState& state(Realm realm) { return states[static_cast<size_t>(realm)]; }
@@ -228,9 +244,10 @@ CGH_EXPORT int32_t CGH_CALL cgh_module_start() {
         auto due = std::bit_cast<FILETIME>(-1000000LL); // 100 ms, in 100 ns units.
         console_deadline = GetTickCount64() + 120000;
         console_pending = true;
-        SetThreadpoolTimer(console_timer, &due, 100, 0);
+        glua_pending = host->create_hook != nullptr;
+        SetThreadpoolTimer(console_timer, &due, 0, 0);
     } else if (host->log) {
-        host->log(host->context, "warn", "Could not schedule Source console startup test.");
+        host->log(host->context, "warn", "Could not schedule CGH-LAPI startup.");
     }
     return 0;
 }
@@ -248,11 +265,11 @@ CGH_EXPORT void CGH_CALL cgh_module_message(const char* source, const char* topi
 
 CGH_EXPORT void CGH_CALL cgh_module_stop() {
     PTP_TIMER timer;
+    const cgh_host_api* api;
     {
         std::scoped_lock lock(state_mutex);
         started = false;
-        host = nullptr;
-        console_pending = false;
+        api = std::exchange(host, nullptr);
         timer = std::exchange(console_timer, nullptr);
         for (auto& current : states) {
             current.owner = nullptr;
@@ -265,4 +282,5 @@ CGH_EXPORT void CGH_CALL cgh_module_stop() {
         WaitForThreadpoolTimerCallbacks(timer, TRUE);
         CloseThreadpoolTimer(timer);
     }
+    if (api) stop_glua(*api);
 }

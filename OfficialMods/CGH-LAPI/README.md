@@ -4,15 +4,15 @@ CGH-LAPI connects ConsGHost mods to the Server and Client GLua realms in Garry's
 
 ## Installation
 
-1. Copy `Mods/CGH-LAPI` into the `Mods/` directory beside `ConsGHost.Host.exe`.
-2. Merge the contents of `GMod/garrysmod/` into the game's existing `garrysmod/` directory. The package includes one DLL per realm in `lua/bin/` and a dispatcher in `lua/autorun/`.
-3. Start Garry's Mod from CGH and load a map. The first dispatcher invocation registers that realm and its version. To run a single realm, install its DLL and put the dispatcher in the matching `lua/autorun/server/` or `lua/autorun/client/` directory.
+1. Use CGH 1.1.0 or later. Copy `Mods/CGH-LAPI` beside `ConsGHost.Host.exe`, inside its `Mods/` directory.
+2. When upgrading from 0.1.x, remove the old `garrysmod/lua/autorun/cgh_lapi.lua`, `garrysmod/lua/bin/gmsv_cgh_lapi_win64.dll`, and `garrysmod/lua/bin/gmcl_cgh_lapi_win64.dll` that were installed with that version.
+3. Start Garry's Mod from CGH with addons enabled and load a map. CGH loads `Native/cgh_lapi_win64.dll` and stages `Addons/cgh_lapi/` for the session. The dispatcher registers each available GLua realm and its version.
 
 The Menu realm is outside the bridge. Each CGH service defines its payload format, permissions, and side effects.
 
 ## Checking the installation
 
-In 0.1.1, the native module waits for the Source console to be ready and writes `[CGH-LAPI] v0.1.1 startup test: Source console online.` once per launch. The main menu can display that message.
+The native module waits for the Source console and writes `[CGH-LAPI] v0.2.0 startup test: Source console online.` once per launch. The main menu can display that message.
 
 After `InitPostEntity`, each realm runs a self-test. The server on a local map waits for the local client's first valid command. Look for `Self-test PASS` or `Self-test FAIL` with the realm and map name in the console. The test checks the reported realm metadata through CGH's version service. It gives the bridge up to 10 seconds to connect. The dispatcher can continue trying to connect after a timeout.
 
@@ -93,7 +93,7 @@ Payloads and synchronous Lua responses are limited to 64 KiB. Event names are 1â
 
 ## Building and testing
 
-From this source directory, run `./build.ps1` using the Visual Studio 2022 x64 C++ tools, Windows SDK, and CMake. It builds the DLLs, runs the native tests against a test host, and installs the package layout into `out/package/`.
+From this source directory, run `./build.ps1` using the Visual Studio 2022 x64 C++ tools, Windows SDK, and CMake. It builds the DLL, runs the native tests against a test host, and installs the package layout into `out/package-0.2.0/`.
 
 For the real-game smoke test, build ConsGHost, close other Garry's Mod sessions, and sign in to Steam. Run these commands from the same source directory:
 
@@ -102,7 +102,7 @@ $gameDirectory = Read-Host 'Garry''s Mod installation directory'
 ./test-game.ps1 -GameDirectory $gameDirectory
 ```
 
-The smoke test uses a separate CGH distribution and opens `gm_construct` with `-noaddons -noworkshop`. It disables the host's native `GameFrame` callback and exercises the GLua `Think` dispatcher directly. The test stages four temporary Lua files only if the paths are free and removes those files when it exits. It checks version reporting, binary echo, service errors, messages, and hook dispatch for both realms, including requests from a worker. Logs are under `out/smoke/`.
+The smoke test uses a separate CGH distribution and opens `gm_construct` with `-noworkshop`. It disables the host's native `GameFrame` callback and exercises the GLua `Think` dispatcher directly. CGH stages and cleans up both the packaged addon and the test addon through its regular addon lifecycle. The test checks the native bootstrap, version reporting, binary echo, service errors, messages, and hook dispatch for both realms, including requests from a worker. Logs are under `out/smoke/`.
 
 ## License
 

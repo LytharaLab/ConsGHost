@@ -6,7 +6,7 @@ var distribution = Path.GetFullPath(args[0]);
 Json.Write(Path.Combine(distribution, "cgh_settings.json"), new HostSettings
 {
     GameDirectory = Path.GetFullPath(args[1]),
-    GameArguments = ["-console", "-novid", "-insecure", "-noaddons", "-noworkshop",
+    GameArguments = ["-console", "-novid", "-insecure", "-noworkshop",
         "-windowed", "-w", "640", "-h", "480", "+map", "gm_construct"],
     EnableEngineHooks = false,
     StartupTimeoutSeconds = 120

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "cgh.lapi",
   "name": "CGH-LAPI",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Session metadata and a bridge between CGH mods and the GLua client/server realms.",
   "author": "LytharaLab",
   "enabled": true,

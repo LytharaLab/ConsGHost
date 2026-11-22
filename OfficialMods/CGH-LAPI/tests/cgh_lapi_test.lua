@@ -36,6 +36,9 @@ hook.Add("Think", "CGH-LAPI.Test.Start", function()
     if code == -4 then return end
     started = true
     local ok, err = pcall(function()
+        local name = "CGH-LAPI/0.2.0/bootstrap"
+        assert(CompileString("return nil", name)() == cgh, "Native bootstrap did not bind this realm")
+        assert(CompileString("return 42", name)() == 42, "Bootstrap intercepted an unrelated chunk")
         assert(result == payload, "synchronous echo failed, code " .. tostring(code))
         local version = assert(cgh.Call(mod, "version", realm))
         local info = assert(util.JSONToTable(version))

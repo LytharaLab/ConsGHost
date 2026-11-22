@@ -2,10 +2,15 @@
 param(
     [ValidateSet('Debug', 'Release')][string]$Configuration = 'Release',
     [string]$BuildDirectory = (Join-Path $PSScriptRoot 'out/build'),
-    [string]$OutputDirectory = (Join-Path $PSScriptRoot 'out/package'),
+    [string]$OutputDirectory,
     [string]$SdkDirectory = (Join-Path $PSScriptRoot '../../Cpp/include')
 )
 $ErrorActionPreference = 'Stop'
+$metadata = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'cghm_metadata.json') -Raw | ConvertFrom-Json
+if (!$OutputDirectory) { $OutputDirectory = Join-Path $PSScriptRoot "out/package-$($metadata.version)" }
+if (Test-Path -LiteralPath (Join-Path $OutputDirectory 'GMod')) {
+    throw 'The output directory contains a legacy CGH-LAPI package. Pass a fresh output directory.'
+}
 
 function Invoke-CheckedCMake {
     & cmake @args

@@ -1,4 +1,5 @@
 #pragma once
+#include "cgh_sdk.h"
 #include <cstdint>
 
 namespace lapi {
@@ -26,4 +27,11 @@ struct Api {
 };
 using GetApi = const Api* (__cdecl*)(uint32_t);
 using CheckVersion = int32_t (__cdecl*)(Realm realm, const void* owner, char* out, int32_t capacity);
+
+// Called on the startup timer until lua_shared.dll appears or setup fails.
+bool install_glua(const cgh_host_api& host);
+void stop_glua(const cgh_host_api& host);
 }
+
+CGH_EXPORT const lapi::Api* CGH_CALL cgh_lapi_get_api(uint32_t version);
+CGH_EXPORT int32_t CGH_CALL cgh_lapi_check_version(lapi::Realm realm, const void* owner, char* out, int32_t capacity);
