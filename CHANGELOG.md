@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.2
+
+- Fix intermittent crashes at game startup while CGH and mods install native hooks. MinHook now enumerates this process's threads through ntdll instead of the Toolhelp API that Chromium's `chrome_elf.dll` detours in Garry's Mod.
+- Serialize hook creation and enabling on one native worker so the engine hook, CGH-LAPI, and rendering mods can install hooks at the same time without suspending each other.
+- Existing CGH mods need no changes; the native hook ABI is unchanged.
+
 ## 1.2.1
 
 - The desktop host supports English, Simplified Chinese, Russian, Spanish, and French. It follows the Windows display language by default and falls back to English.

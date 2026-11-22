@@ -260,65 +260,81 @@ static VOID ProcessThreadIPs(HANDLE hThread, UINT pos, UINT action)
 }
 
 //-------------------------------------------------------------------------
+// CGH: GMod loads Chromium's chrome_elf.dll, which detours Thread32Next and
+// can jump through a null original pointer when MinHook enumerates threads
+// during early startup. Enumerate this process's threads through ntdll
+// instead; NtGetNextThread does not touch chrome_elf and does not capture a
+// process snapshot (PSS capture could stall the loader).
+typedef NTSTATUS(NTAPI* NTGETNEXTTHREAD)(HANDLE, HANDLE, ACCESS_MASK, ULONG, ULONG, PHANDLE);
+
 static BOOL EnumerateThreads(PFROZEN_THREADS pThreads)
 {
-    BOOL succeeded = FALSE;
+    static NTGETNEXTTHREAD getNextThread = NULL;
+    HANDLE thread = NULL;
+    BOOL succeeded = TRUE;
 
-    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-    if (hSnapshot != INVALID_HANDLE_VALUE)
+    if (getNextThread == NULL)
     {
-        THREADENTRY32 te;
-        te.dwSize = sizeof(THREADENTRY32);
-        if (Thread32First(hSnapshot, &te))
+        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        if (ntdll != NULL)
+            getNextThread = (NTGETNEXTTHREAD)GetProcAddress(ntdll, "NtGetNextThread");
+    }
+    if (getNextThread == NULL)
+        return FALSE;
+
+    for (;;)
+    {
+        HANDLE next = NULL;
+        NTSTATUS status = getNextThread(GetCurrentProcess(), thread, THREAD_QUERY_INFORMATION, 0, 0, &next);
+        DWORD threadId;
+
+        if (thread != NULL)
+            CloseHandle(thread);
+        thread = NULL;
+        if (status != 0)
         {
-            succeeded = TRUE;
-            do
-            {
-                if (te.dwSize >= (FIELD_OFFSET(THREADENTRY32, th32OwnerProcessID) + sizeof(DWORD))
-                    && te.th32OwnerProcessID == GetCurrentProcessId()
-                    && te.th32ThreadID != GetCurrentThreadId())
-                {
-                    if (pThreads->pItems == NULL)
-                    {
-                        pThreads->capacity = INITIAL_THREAD_CAPACITY;
-                        pThreads->pItems
-                            = (LPDWORD)HeapAlloc(g_hHeap, 0, pThreads->capacity * sizeof(DWORD));
-                        if (pThreads->pItems == NULL)
-                        {
-                            succeeded = FALSE;
-                            break;
-                        }
-                    }
-                    else if (pThreads->size >= pThreads->capacity)
-                    {
-                        LPDWORD p;
-                        pThreads->capacity *= 2;
-                        p = (LPDWORD)HeapReAlloc(
-                            g_hHeap, 0, pThreads->pItems, pThreads->capacity * sizeof(DWORD));
-                        if (p == NULL)
-                        {
-                            succeeded = FALSE;
-                            break;
-                        }
-
-                        pThreads->pItems = p;
-                    }
-                    pThreads->pItems[pThreads->size++] = te.th32ThreadID;
-                }
-
-                te.dwSize = sizeof(THREADENTRY32);
-            } while (Thread32Next(hSnapshot, &te));
-
-            if (succeeded && GetLastError() != ERROR_NO_MORE_FILES)
+            if (status != (NTSTATUS)0x8000001A) // STATUS_NO_MORE_ENTRIES
                 succeeded = FALSE;
+            break;
+        }
 
-            if (!succeeded && pThreads->pItems != NULL)
+        thread = next;
+        threadId = GetThreadId(thread);
+        if (threadId == 0 || threadId == GetCurrentThreadId())
+            continue;
+
+        if (pThreads->pItems == NULL)
+        {
+            pThreads->capacity = INITIAL_THREAD_CAPACITY;
+            pThreads->pItems = (LPDWORD)HeapAlloc(g_hHeap, 0, pThreads->capacity * sizeof(DWORD));
+            if (pThreads->pItems == NULL)
             {
-                HeapFree(g_hHeap, 0, pThreads->pItems);
-                pThreads->pItems = NULL;
+                succeeded = FALSE;
+                break;
             }
         }
-        CloseHandle(hSnapshot);
+        else if (pThreads->size >= pThreads->capacity)
+        {
+            LPDWORD p;
+            pThreads->capacity *= 2;
+            p = (LPDWORD)HeapReAlloc(g_hHeap, 0, pThreads->pItems, pThreads->capacity * sizeof(DWORD));
+            if (p == NULL)
+            {
+                succeeded = FALSE;
+                break;
+            }
+
+            pThreads->pItems = p;
+        }
+        pThreads->pItems[pThreads->size++] = threadId;
+    }
+
+    if (thread != NULL)
+        CloseHandle(thread);
+    if (!succeeded && pThreads->pItems != NULL)
+    {
+        HeapFree(g_hHeap, 0, pThreads->pItems);
+        pThreads->pItems = NULL;
     }
 
     return succeeded;
